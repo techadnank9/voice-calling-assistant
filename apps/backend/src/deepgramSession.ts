@@ -83,10 +83,8 @@ export class DeepgramCallSession {
                 smart_format: true
               }
             },
-            think: {
-              prompt:
-                'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.'
-            },
+            prompt:
+              'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.',
             speak: { provider: { type: 'deepgram', model: 'aura-2-asteria-en' } },
             greeting:
               'Hello, thanks for calling. I can help with pickup orders and table reservations. How can I help you today?'
