@@ -125,7 +125,7 @@ export default function CallsPage() {
               <div key={call.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium text-slate-800">
-                    {call.from_number ?? 'Unknown'} {'->'} {call.to_number ?? 'Unknown'}
+                    {displayFrom(call.from_number, call.twilio_call_sid)} {'->'} {displayTo(call.to_number)}
                   </p>
                   <StatusChip status={call.status} />
                 </div>
@@ -180,4 +180,14 @@ function format(v: string | null) {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return v;
   return d.toLocaleString();
+}
+
+function displayFrom(from: string | null, sid: string) {
+  if (from && from.trim().length > 0) return from;
+  return `Caller ${sid.slice(-6)}`;
+}
+
+function displayTo(to: string | null) {
+  if (to && to.trim().length > 0) return to;
+  return 'Restaurant Line';
 }
