@@ -46,6 +46,7 @@ app.post('/twilio/voice', twilioWebhookValidator, async (req, res) => {
   const callSid = String(req.body.CallSid ?? '');
   const from = String(req.body.From ?? '');
   const to = String(req.body.To ?? '');
+  logger.info({ callSid, from, to }, 'Inbound call webhook received');
 
   if (callSid) {
     await upsertCall({
@@ -97,6 +98,13 @@ wss.on('connection', (ws) => {
 
     if (payload.event === 'start' && payload.start?.callSid && payload.start.streamSid) {
       activeCallSid = payload.start.callSid;
+      logger.info(
+        {
+          callSid: activeCallSid,
+          streamSid: payload.start.streamSid
+        },
+        'Twilio media stream started'
+      );
       const session = new DeepgramCallSession({
         twilioWs: ws,
         twilioCallSid: payload.start.callSid,
@@ -116,10 +124,14 @@ wss.on('connection', (ws) => {
 
     if (!activeCallSid) return;
     if (payload.event) {
+      logger.debug({ callSid: activeCallSid, twilioEvent: payload.event }, 'Twilio media event');
+    }
+    if (payload.event) {
       sessions.get(activeCallSid)?.handleTwilioEvent(payload);
     }
 
     if (payload.event === 'stop') {
+      logger.info({ callSid: activeCallSid }, 'Twilio media stream stopped');
       sessions.get(activeCallSid)?.close();
       sessions.delete(activeCallSid);
       await upsertCall({
@@ -132,6 +144,7 @@ wss.on('connection', (ws) => {
 
   ws.on('close', async () => {
     if (!activeCallSid) return;
+    logger.info({ callSid: activeCallSid }, 'Twilio websocket closed');
     sessions.get(activeCallSid)?.close();
     sessions.delete(activeCallSid);
     await upsertCall({

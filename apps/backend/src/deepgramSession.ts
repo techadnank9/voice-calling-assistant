@@ -20,6 +20,7 @@ export class DeepgramCallSession {
   private readonly streamSid: string;
   private deepgramWs: WebSocket | null = null;
   private deepgramReady = false;
+  private transcriptTurns = 0;
 
   constructor(params: { twilioWs: WebSocket; twilioCallSid: string; streamSid: string }) {
     this.twilioWs = params.twilioWs;
@@ -31,7 +32,7 @@ export class DeepgramCallSession {
     this.deepgramWs = new WebSocket(env.DEEPGRAM_AGENT_WS_URL, ['token', env.DEEPGRAM_API_KEY]);
 
     this.deepgramWs.on('open', () => {
-      logger.info({ callSid: this.twilioCallSid }, 'Deepgram websocket opened');
+      logger.info({ callSid: this.twilioCallSid, streamSid: this.streamSid }, 'Deepgram websocket opened');
     });
 
     this.deepgramWs.on('message', async (raw, isBinary) => {
@@ -60,6 +61,7 @@ export class DeepgramCallSession {
 
       if (kind === 'Welcome') {
         this.deepgramReady = true;
+        logger.info({ callSid: this.twilioCallSid }, 'Deepgram welcome received, sending settings');
         this.sendDeepgram({
           type: 'Settings',
           audio: {
@@ -89,12 +91,23 @@ export class DeepgramCallSession {
       }
 
       if (kind === 'UserStartedSpeaking') {
+        logger.info({ callSid: this.twilioCallSid }, 'User started speaking (barge-in)');
         this.twilioWs.send(JSON.stringify({ event: 'clear', streamSid: this.streamSid }));
       }
 
       if (kind.toLowerCase().includes('transcript')) {
         const transcript = this.extractTranscript(evt);
         if (transcript) {
+          this.transcriptTurns += 1;
+          logger.info(
+            {
+              callSid: this.twilioCallSid,
+              turn: this.transcriptTurns,
+              role: 'user',
+              text: transcript.slice(0, 500)
+            },
+            'Conversation transcript'
+          );
           await insertMessage({
             twilioCallSid: this.twilioCallSid,
             role: 'user',
@@ -106,6 +119,16 @@ export class DeepgramCallSession {
       if (kind.toLowerCase().includes('response') || kind.toLowerCase().includes('assistant')) {
         const responseText = this.extractTranscript(evt);
         if (responseText) {
+          this.transcriptTurns += 1;
+          logger.info(
+            {
+              callSid: this.twilioCallSid,
+              turn: this.transcriptTurns,
+              role: 'assistant',
+              text: responseText.slice(0, 500)
+            },
+            'Conversation transcript'
+          );
           await insertMessage({
             twilioCallSid: this.twilioCallSid,
             role: 'assistant',
@@ -123,6 +146,15 @@ export class DeepgramCallSession {
         eventType: `deepgram.${kind}`,
         payload: evt as Record<string, unknown>
       }).catch(() => undefined);
+
+      logger.debug(
+        {
+          callSid: this.twilioCallSid,
+          deepgramEvent: kind,
+          keys: Object.keys(evt).slice(0, 20)
+        },
+        'Deepgram event processed'
+      );
     });
 
     this.deepgramWs.on('close', (code, reason) => {
@@ -130,7 +162,8 @@ export class DeepgramCallSession {
         {
           callSid: this.twilioCallSid,
           code,
-          reason: reason.toString('utf8')
+          reason: reason.toString('utf8'),
+          totalTurns: this.transcriptTurns
         },
         'Deepgram session closed'
       );
@@ -151,6 +184,7 @@ export class DeepgramCallSession {
     }
 
     if (event.event === 'stop') {
+      logger.info({ callSid: this.twilioCallSid, totalTurns: this.transcriptTurns }, 'Twilio stop received');
       this.sendDeepgram({ type: 'Close' });
       this.deepgramWs.close();
     }
