@@ -20,7 +20,9 @@ export class DeepgramCallSession {
   private readonly streamSid: string;
   private deepgramWs: WebSocket | null = null;
   private deepgramReady = false;
+  private settingsSent = false;
   private transcriptTurns = 0;
+  private pendingAudioChunks: Buffer[] = [];
 
   constructor(params: { twilioWs: WebSocket; twilioCallSid: string; streamSid: string }) {
     this.twilioWs = params.twilioWs;
@@ -60,7 +62,7 @@ export class DeepgramCallSession {
       const kind = String(evt.type ?? evt.event ?? 'unknown');
 
       if (kind === 'Welcome') {
-        this.deepgramReady = true;
+        this.deepgramReady = false;
         const menuPrompt = await buildMenuGuardPrompt().catch(() => 'Menu unavailable.');
         const stylePrompt = [
           'You are speaking live on a phone call, so sound like a real human host.',
@@ -114,10 +116,22 @@ export class DeepgramCallSession {
           'Deepgram welcome received, sending settings'
         );
         this.sendDeepgram(settingsPayload);
+        this.settingsSent = true;
       }
 
       if (kind === 'SettingsApplied') {
         logger.info({ callSid: this.twilioCallSid }, 'Deepgram settings applied');
+        this.deepgramReady = true;
+        if (this.pendingAudioChunks.length > 0 && this.deepgramWs?.readyState === WebSocket.OPEN) {
+          for (const chunk of this.pendingAudioChunks) {
+            this.deepgramWs.send(chunk);
+          }
+          logger.info(
+            { callSid: this.twilioCallSid, bufferedChunks: this.pendingAudioChunks.length },
+            'Flushed buffered audio after settings applied'
+          );
+          this.pendingAudioChunks = [];
+        }
       }
 
       if (kind === 'Error' || kind === 'Warning') {
@@ -216,10 +230,16 @@ export class DeepgramCallSession {
   }
 
   handleTwilioEvent(event: TwilioMediaPayload) {
-    if (!this.deepgramWs || this.deepgramWs.readyState !== WebSocket.OPEN || !this.deepgramReady) return;
+    if (!this.deepgramWs || this.deepgramWs.readyState !== WebSocket.OPEN) return;
 
     if (event.event === 'media' && event.media?.payload) {
       const chunk = Buffer.from(event.media.payload, 'base64');
+      if (!this.settingsSent || !this.deepgramReady) {
+        if (this.pendingAudioChunks.length < 256) {
+          this.pendingAudioChunks.push(chunk);
+        }
+        return;
+      }
       this.deepgramWs.send(chunk);
       return;
     }
