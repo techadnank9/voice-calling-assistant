@@ -11,11 +11,15 @@ type Order = {
   status: string;
   total_cents: number;
   created_at: string;
+  notes?: string | null;
 };
 
 type OrderItem = {
   id: string;
   order_id: string;
+  qty?: number;
+  line_total_cents?: number;
+  menu_items?: { name?: string | null } | null;
 };
 
 export default function HomePage() {
@@ -31,7 +35,7 @@ export default function HomePage() {
     const load = async () => {
       const { data: ordersData } = await client
         .from('orders')
-        .select('id,caller_phone,customer_name,pickup_time,status,total_cents,created_at')
+        .select('id,caller_phone,customer_name,pickup_time,status,total_cents,created_at,notes')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -45,7 +49,7 @@ export default function HomePage() {
 
       const { data: itemsData } = await client
         .from('order_items')
-        .select('id,order_id')
+        .select('id,order_id,qty,line_total_cents,menu_items(name)')
         .in('order_id', rows.map((r) => r.id));
 
       setOrderItems((itemsData as OrderItem[]) ?? []);
@@ -65,9 +69,11 @@ export default function HomePage() {
   }, []);
 
   const itemsByOrder = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, OrderItem[]>();
     for (const item of orderItems) {
-      map.set(item.order_id, (map.get(item.order_id) ?? 0) + 1);
+      const bucket = map.get(item.order_id) ?? [];
+      bucket.push(item);
+      map.set(item.order_id, bucket);
     }
     return map;
   }, [orderItems]);
@@ -148,7 +154,7 @@ export default function HomePage() {
                         </tr>
                       ) : (
                         filtered.map((order) => {
-                          const count = itemsByOrder.get(order.id) ?? 0;
+                          const count = (itemsByOrder.get(order.id) ?? []).length;
                           return (
                             <tr
                               key={order.id}
@@ -173,28 +179,63 @@ export default function HomePage() {
             </div>
         </section>
       </div>
-      {selectedOrder ? (
+      {selectedOrder ? (() => {
+        const selectedItems = itemsByOrder.get(selectedOrder.id) ?? [];
+        return (
+        <>
+        <div className="fixed inset-0 z-20 bg-slate-900/25" onClick={() => setSelectedOrderId(null)} />
         <aside className="fixed inset-y-0 right-0 z-30 w-full max-w-md border-l border-slate-200 bg-white p-5 shadow-2xl">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xl font-semibold text-slate-900">{selectedOrder.customer_name}</p>
-              <p className="text-sm text-slate-500">{selectedOrder.caller_phone ?? 'Restaurant Caller'}</p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-lg font-bold text-emerald-700">
+                {selectedOrder.customer_name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-xl font-semibold text-slate-900">{selectedOrder.customer_name}</p>
+                <p className="text-sm text-slate-500">{selectedOrder.caller_phone ?? 'Restaurant Caller'}</p>
+              </div>
             </div>
-            <button
-              onClick={() => setSelectedOrderId(null)}
-              className="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-600"
-            >
-              Close
-            </button>
+            <button onClick={() => setSelectedOrderId(null)} className="text-2xl text-slate-400 hover:text-slate-700">×</button>
           </div>
-          <div className="mt-4 space-y-2 text-sm text-slate-700">
-            <p><span className="font-semibold">Pickup:</span> {selectedOrder.pickup_time}</p>
-            <p><span className="font-semibold">Status:</span> {selectedOrder.status}</p>
-            <p><span className="font-semibold">Total:</span> ${(selectedOrder.total_cents / 100).toFixed(2)}</p>
-            <p><span className="font-semibold">Items:</span> {itemsByOrder.get(selectedOrder.id) ?? 0}</p>
+
+          <div className="mt-5 rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-slate-900">Order #{selectedOrder.id.slice(0, 6).toUpperCase()}</p>
+              <p className="text-3xl font-bold text-slate-900">${(selectedOrder.total_cents / 100).toFixed(2)}</p>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">Pickup time: {selectedOrder.pickup_time}</p>
+          </div>
+
+          <div className="mt-4 space-y-3 rounded-xl border border-slate-200 p-4">
+            {selectedItems.length === 0 ? <p className="text-sm text-slate-500">No line items</p> : null}
+            {selectedItems.map((item) => (
+              <div key={item.id} className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-900">
+                    {item.qty ?? 1}x {item.menu_items?.name ?? 'Menu item'}
+                  </p>
+                  <p className="font-semibold text-slate-800">${((item.line_total_cents ?? 0) / 100).toFixed(2)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 flex items-center gap-2">
+            <span className="rounded-lg bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">Pickup</span>
+            <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">ASAP</span>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-200 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversation Summary</p>
+            <p className="mt-2 text-sm text-slate-700">
+              {selectedOrder.notes?.trim()
+                ? selectedOrder.notes
+                : `${selectedOrder.customer_name} placed a pickup order. The order details and pickup time were confirmed.`}
+            </p>
           </div>
         </aside>
-      ) : null}
+        </>
+      )})() : null}
     </main>
   );
 }
