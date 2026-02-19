@@ -165,3 +165,90 @@ export async function buildMenuGuardPrompt(): Promise<string> {
     menuLines
   ].join('\n');
 }
+
+export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: string) {
+  const { data: callRow } = await supabase
+    .from('calls')
+    .select('id,from_number')
+    .eq('twilio_call_sid', twilioCallSid)
+    .maybeSingle();
+
+  if (!callRow) return;
+
+  const { data: transcriptRows } = await supabase
+    .from('call_messages')
+    .select('role,text,created_at')
+    .eq('call_id', callRow.id)
+    .order('created_at', { ascending: true });
+
+  const transcript = (transcriptRows ?? [])
+    .map((r) => `${r.role}: ${r.text}`)
+    .join('\n')
+    .toLowerCase();
+
+  if (!transcript.trim()) return;
+
+  const tag = `[auto:${twilioCallSid}]`;
+  const nameMatch =
+    transcript.match(/my name is\\s+([a-z]+(?:\\s+[a-z]+){0,2})/) ??
+    transcript.match(/name\\s+is\\s+([a-z]+(?:\\s+[a-z]+){0,2})/);
+  const customerName = nameMatch?.[1]
+    ? nameMatch[1].replace(/\b\w/g, (m) => m.toUpperCase())
+    : 'Phone Customer';
+
+  const timeMatch = transcript.match(/(\\d{1,2}(:\\d{2})?\\s?(am|pm))/i);
+  const timeValue = timeMatch?.[1] ?? 'ASAP';
+
+  const { data: existingOrder } = await supabase
+    .from('orders')
+    .select('id')
+    .ilike('notes', `%${tag}%`)
+    .limit(1)
+    .maybeSingle();
+
+  const { data: existingReservation } = await supabase
+    .from('reservations')
+    .select('id')
+    .ilike('notes', `%${tag}%`)
+    .limit(1)
+    .maybeSingle();
+
+  const { data: menuRows } = await supabase.from('menu_items').select('id,name,price_cents').eq('active', true);
+
+  const matchedItems =
+    menuRows?.filter((item) => transcript.includes(item.name.toLowerCase())).map((item) => ({
+      menuItemId: item.id,
+      qty: 1,
+      lineTotalCents: item.price_cents
+    })) ?? [];
+
+  const totalCents = matchedItems.reduce((sum, item) => sum + (item.lineTotalCents ?? 0), 0);
+
+  const indicatesOrder = transcript.includes('order') || matchedItems.length > 0;
+  const indicatesReservation =
+    transcript.includes('reservation') || transcript.includes('reserve') || transcript.includes('table for');
+
+  if (indicatesOrder && !existingOrder) {
+    await createOrder({
+      callerPhone: callRow.from_number ?? undefined,
+      customerName,
+      pickupTime: timeValue,
+      notes: `${tag} auto-captured from transcript`,
+      totalCents: totalCents || 0,
+      items: matchedItems
+    });
+  }
+
+  if (indicatesReservation && !existingReservation) {
+    const partyMatch = transcript.match(/table for\\s+(\\d+)/) ?? transcript.match(/party\\s+of\\s+(\\d+)/);
+    const partySize = Number(partyMatch?.[1] ?? '2');
+    await createReservation({
+      callerPhone: callRow.from_number ?? undefined,
+      guestName: customerName,
+      partySize: Number.isFinite(partySize) ? partySize : 2,
+      reservationTime: timeValue,
+      notes: `${tag} auto-captured from transcript`,
+      status: 'confirmed'
+    });
+  }
+}

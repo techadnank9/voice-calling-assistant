@@ -6,7 +6,7 @@ import twilio from 'twilio';
 import { env } from './config.js';
 import { DeepgramCallSession } from './deepgramSession.js';
 import { logger } from './logger.js';
-import { insertEvent, upsertCall } from './supabase.js';
+import { insertEvent, persistFallbackOrderAndReservationFromCall, upsertCall } from './supabase.js';
 
 const app = express();
 app.use(pinoHttp.default({ logger }));
@@ -139,6 +139,9 @@ wss.on('connection', (ws) => {
         status: 'completed',
         endedAt: new Date().toISOString()
       }).catch((error) => logger.error({ error }, 'Failed to close call'));
+      await persistFallbackOrderAndReservationFromCall(activeCallSid).catch((error) =>
+        logger.error({ error, callSid: activeCallSid }, 'Failed to persist fallback order/reservation')
+      );
     }
   });
 
@@ -152,6 +155,9 @@ wss.on('connection', (ws) => {
       status: 'completed',
       endedAt: new Date().toISOString()
     }).catch(() => undefined);
+    await persistFallbackOrderAndReservationFromCall(activeCallSid).catch((error) =>
+      logger.error({ error, callSid: activeCallSid }, 'Failed to persist fallback order/reservation on close')
+    );
   });
 });
 
