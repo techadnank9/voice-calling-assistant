@@ -1,0 +1,16 @@
+{
+  "name": "voice-calling-assistant",
+  "private": true,
+  "workspaces": [
+    "apps/backend",
+    "apps/frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm --workspace @voice-assistant/backend run dev",
+    "build:backend": "npm --workspace @voice-assistant/backend run build",
+    "start:backend": "npm --workspace @voice-assistant/backend run start",
+    "dev:frontend": "npm --workspace @voice-assistant/frontend run dev",
+    "build:frontend": "npm --workspace @voice-assistant/frontend run build",
+    "start:frontend": "npm --workspace @voice-assistant/frontend run start"
+  }
+}

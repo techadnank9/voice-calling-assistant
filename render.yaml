@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: voice-assistant-backend
+    runtime: node
+    rootDir: .
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm ci && npm run build:backend
+    startCommand: npm run start:backend
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: APP_BASE_URL
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: DEEPGRAM_AGENT_WS_URL
+        value: wss://agent.deepgram.com/v1/agent/converse
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  - type: web
+    name: voice-assistant-frontend
+    runtime: node
+    rootDir: .
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm ci && npm run build:frontend
+    startCommand: npm --workspace @voice-assistant/frontend run start -- -p $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
