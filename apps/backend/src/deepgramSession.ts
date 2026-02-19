@@ -150,46 +150,65 @@ export class DeepgramCallSession {
         this.twilioWs.send(JSON.stringify({ event: 'clear', streamSid: this.streamSid }));
       }
 
-      if (kind.toLowerCase().includes('transcript')) {
-        const transcript = this.extractTranscript(evt);
-        if (transcript) {
-          this.transcriptTurns += 1;
-          logger.info(
-            {
-              callSid: this.twilioCallSid,
-              turn: this.transcriptTurns,
-              role: 'user',
-              text: transcript.slice(0, 500)
-            },
-            'Conversation transcript'
-          );
-          await insertMessage({
-            twilioCallSid: this.twilioCallSid,
-            role: 'user',
-            text: transcript
-          }).catch((err) => logger.warn({ err }, 'Failed to write user transcript'));
-        }
-      }
+      const transcript = this.extractTranscript(evt);
+      const lowerKind = kind.toLowerCase();
+      const isLifecycleEvent =
+        lowerKind === 'welcome' ||
+        lowerKind === 'settingsapplied' ||
+        lowerKind === 'metadata' ||
+        lowerKind === 'keepalive' ||
+        lowerKind === 'userstartedspeaking' ||
+        lowerKind === 'agentaudiodone' ||
+        lowerKind === 'agentstartedspeaking' ||
+        lowerKind === 'agentthinking' ||
+        lowerKind === 'error' ||
+        lowerKind === 'warning';
 
-      if (kind.toLowerCase().includes('response') || kind.toLowerCase().includes('assistant')) {
-        const responseText = this.extractTranscript(evt);
-        if (responseText) {
-          this.transcriptTurns += 1;
-          logger.info(
-            {
-              callSid: this.twilioCallSid,
-              turn: this.transcriptTurns,
-              role: 'assistant',
-              text: responseText.slice(0, 500)
-            },
-            'Conversation transcript'
+      if (transcript && !isLifecycleEvent) {
+        const inferredRole = this.inferRole(evt, kind);
+        this.transcriptTurns += 1;
+        logger.info(
+          {
+            callSid: this.twilioCallSid,
+            turn: this.transcriptTurns,
+            deepgramEvent: kind,
+            role: inferredRole,
+            text: transcript.slice(0, 500)
+          },
+          'Conversation transcript'
+        );
+        await insertMessage({
+          twilioCallSid: this.twilioCallSid,
+          role: inferredRole,
+          text: transcript
+        })
+          .then(() =>
+            logger.info(
+              {
+                callSid: this.twilioCallSid,
+                deepgramEvent: kind,
+                role: inferredRole,
+                transcriptLength: transcript.length
+              },
+              'Transcript persisted'
+            )
+          )
+          .catch((err) =>
+            logger.warn(
+              { err, callSid: this.twilioCallSid, deepgramEvent: kind },
+              'Failed to write transcript'
+            )
           );
-          await insertMessage({
-            twilioCallSid: this.twilioCallSid,
-            role: 'assistant',
-            text: responseText
-          }).catch((err) => logger.warn({ err }, 'Failed to write assistant transcript'));
-        }
+      } else if (!isLifecycleEvent) {
+        logger.debug(
+          {
+            callSid: this.twilioCallSid,
+            deepgramEvent: kind,
+            hasText: Boolean(transcript),
+            keys: Object.keys(evt).slice(0, 20)
+          },
+          'No transcript extracted from non-lifecycle event'
+        );
       }
 
       if (kind.toLowerCase().includes('tool') || kind === 'FunctionCallRequest') {
@@ -264,13 +283,31 @@ export class DeepgramCallSession {
   }
 
   private extractTranscript(evt: DeepgramEvent): string | null {
+    const message = (evt as { message?: unknown }).message;
+    const messageText =
+      typeof message === 'string'
+        ? message
+        : (message as { content?: unknown; text?: unknown } | undefined)?.content ??
+          (message as { content?: unknown; text?: unknown } | undefined)?.text;
     const candidates = [
       (evt as { text?: string }).text,
       (evt as { transcript?: string }).transcript,
-      (evt as { message?: string }).message,
-      (evt as { content?: string }).content
+      typeof messageText === 'string' ? messageText : undefined,
+      (evt as { content?: string }).content,
+      (evt as { response?: string }).response
     ];
     return candidates.find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? null;
+  }
+
+  private inferRole(evt: DeepgramEvent, kind: string): 'user' | 'assistant' | 'system' {
+    const role = (evt as { role?: string }).role?.toLowerCase();
+    if (role === 'assistant' || role === 'agent') return 'assistant';
+    if (role === 'user' || role === 'caller' || role === 'customer') return 'user';
+
+    const lowered = kind.toLowerCase();
+    if (lowered.includes('assistant') || lowered.includes('agent')) return 'assistant';
+    if (lowered.includes('user') || lowered.includes('caller')) return 'user';
+    return 'system';
   }
 
   private async handleToolEvent(evt: DeepgramEvent) {

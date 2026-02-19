@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from './config.js';
+import { logger } from './logger.js';
 
 export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false }
@@ -43,11 +44,35 @@ export async function insertMessage(params: {
   text: string;
   confidence?: number;
 }) {
-  const { data: callRow, error: callError } = await supabase
+  logger.info(
+    {
+      callSid: params.twilioCallSid,
+      role: params.role,
+      textLength: params.text.length
+    },
+    'insertMessage called'
+  );
+
+  let { data: callRow, error: callError } = await supabase
     .from('calls')
     .select('id')
     .eq('twilio_call_sid', params.twilioCallSid)
-    .single();
+    .maybeSingle();
+
+  if (!callRow) {
+    logger.warn({ callSid: params.twilioCallSid }, 'Call row missing while inserting transcript, creating fallback row');
+    await upsertCall({
+      twilioCallSid: params.twilioCallSid,
+      status: 'in_progress'
+    });
+    const retry = await supabase
+      .from('calls')
+      .select('id')
+      .eq('twilio_call_sid', params.twilioCallSid)
+      .maybeSingle();
+    callRow = retry.data ?? null;
+    callError = retry.error;
+  }
 
   if (callError || !callRow) throw callError ?? new Error('Call row not found');
 
@@ -59,6 +84,14 @@ export async function insertMessage(params: {
   });
 
   if (error) throw error;
+  logger.info(
+    {
+      callSid: params.twilioCallSid,
+      callId: callRow.id,
+      role: params.role
+    },
+    'insertMessage succeeded'
+  );
 }
 
 export async function insertEvent(params: {
@@ -66,11 +99,29 @@ export async function insertEvent(params: {
   eventType: string;
   payload: Record<string, unknown>;
 }) {
-  const { data: callRow, error: callError } = await supabase
+  let { data: callRow, error: callError } = await supabase
     .from('calls')
     .select('id')
     .eq('twilio_call_sid', params.twilioCallSid)
-    .single();
+    .maybeSingle();
+
+  if (!callRow) {
+    logger.warn(
+      { callSid: params.twilioCallSid, eventType: params.eventType },
+      'Call row missing while inserting event, creating fallback row'
+    );
+    await upsertCall({
+      twilioCallSid: params.twilioCallSid,
+      status: 'in_progress'
+    });
+    const retry = await supabase
+      .from('calls')
+      .select('id')
+      .eq('twilio_call_sid', params.twilioCallSid)
+      .maybeSingle();
+    callRow = retry.data ?? null;
+    callError = retry.error;
+  }
 
   if (callError || !callRow) return;
 
@@ -79,6 +130,10 @@ export async function insertEvent(params: {
     event_type: params.eventType,
     payload: params.payload
   });
+  logger.debug(
+    { callSid: params.twilioCallSid, callId: callRow.id, eventType: params.eventType },
+    'insertEvent succeeded'
+  );
 }
 
 export async function createOrder(params: {
