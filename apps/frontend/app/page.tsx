@@ -9,7 +9,6 @@ type Order = {
   customer_name: string;
   pickup_time: string;
   status: string;
-  notes: string | null;
   total_cents: number;
   created_at: string;
 };
@@ -17,33 +16,11 @@ type Order = {
 type OrderItem = {
   id: string;
   order_id: string;
-  qty: number;
-  line_total_cents: number;
-  menu_items?: { name?: string | null } | null;
-};
-
-type Call = {
-  id: string;
-  twilio_call_sid: string;
-  from_number: string | null;
-  started_at: string | null;
-  ended_at: string | null;
-};
-
-type CallMessage = {
-  id: string;
-  call_id: string;
-  role: string;
-  text: string;
-  created_at: string;
 };
 
 export default function HomePage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [calls, setCalls] = useState<Call[]>([]);
-  const [messages, setMessages] = useState<CallMessage[]>([]);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -51,316 +28,160 @@ export default function HomePage() {
     if (!client) return;
 
     const load = async () => {
-      const [{ data: ordersData }, { data: callsData }] = await Promise.all([
-        client
-          .from('orders')
-          .select('id,caller_phone,customer_name,pickup_time,status,notes,total_cents,created_at')
-          .order('created_at', { ascending: false })
-          .limit(100),
-        client
-          .from('calls')
-          .select('id,twilio_call_sid,from_number,started_at,ended_at')
-          .order('created_at', { ascending: false })
-          .limit(100)
-      ]);
+      const { data: ordersData } = await client
+        .from('orders')
+        .select('id,caller_phone,customer_name,pickup_time,status,total_cents,created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
 
-      const orderRows = (ordersData as Order[]) ?? [];
-      const callRows = (callsData as Call[]) ?? [];
-      setOrders(orderRows);
-      setCalls(callRows);
+      const rows = (ordersData as Order[]) ?? [];
+      setOrders(rows);
 
-      if (!selectedOrderId && orderRows.length > 0) {
-        setSelectedOrderId(orderRows[0].id);
-      }
-
-      const orderIds = orderRows.map((o) => o.id);
-      if (orderIds.length > 0) {
-        const { data: itemData } = await client
-          .from('order_items')
-          .select('id,order_id,qty,line_total_cents,menu_items(name)')
-          .in('order_id', orderIds)
-          .order('created_at', { ascending: true });
-        setOrderItems((itemData as OrderItem[]) ?? []);
-      } else {
+      if (rows.length === 0) {
         setOrderItems([]);
+        return;
       }
 
-      const callIds = callRows.map((c) => c.id);
-      if (callIds.length > 0) {
-        const { data: msgData } = await client
-          .from('call_messages')
-          .select('id,call_id,role,text,created_at')
-          .in('call_id', callIds)
-          .order('created_at', { ascending: true })
-          .limit(800);
-        setMessages((msgData as CallMessage[]) ?? []);
-      } else {
-        setMessages([]);
-      }
+      const { data: itemsData } = await client
+        .from('order_items')
+        .select('id,order_id')
+        .in('order_id', rows.map((r) => r.id));
+
+      setOrderItems((itemsData as OrderItem[]) ?? []);
     };
 
     load().catch(console.error);
 
     const channel = client
-      .channel('ops-live')
+      .channel('orders-table-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'calls' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_messages' }, () => load())
       .subscribe();
 
     return () => {
       client.removeChannel(channel).catch(() => undefined);
     };
-  }, [selectedOrderId]);
+  }, []);
 
   const itemsByOrder = useMemo(() => {
-    const map = new Map<string, OrderItem[]>();
+    const map = new Map<string, number>();
     for (const item of orderItems) {
-      const bucket = map.get(item.order_id) ?? [];
-      bucket.push(item);
-      map.set(item.order_id, bucket);
+      map.set(item.order_id, (map.get(item.order_id) ?? 0) + 1);
     }
     return map;
   }, [orderItems]);
 
-  const messagesByCall = useMemo(() => {
-    const map = new Map<string, CallMessage[]>();
-    for (const msg of messages) {
-      const bucket = map.get(msg.call_id) ?? [];
-      bucket.push(msg);
-      map.set(msg.call_id, bucket);
-    }
-    return map;
-  }, [messages]);
-
-  const filteredOrders = useMemo(() => {
+  const filtered = useMemo(() => {
     if (!query.trim()) return orders;
     const q = query.toLowerCase();
     return orders.filter(
       (o) =>
-        o.customer_name.toLowerCase().includes(q) ||
         (o.caller_phone ?? '').toLowerCase().includes(q) ||
+        o.customer_name.toLowerCase().includes(q) ||
         o.pickup_time.toLowerCase().includes(q)
     );
   }, [orders, query]);
 
-  const selectedOrder = useMemo(() => orders.find((o) => o.id === selectedOrderId) ?? null, [orders, selectedOrderId]);
-  const selectedItems = selectedOrder ? itemsByOrder.get(selectedOrder.id) ?? [] : [];
-
-  const matchedCall = useMemo(() => {
-    if (!selectedOrder?.caller_phone) return null;
-    return calls.find((c) => c.from_number === selectedOrder.caller_phone) ?? null;
-  }, [calls, selectedOrder]);
-
-  const conversationSummary = useMemo(() => {
-    if (!matchedCall) return 'No transcript linked for this order yet.';
-    const list = messagesByCall.get(matchedCall.id) ?? [];
-    if (list.length === 0) return 'No transcript linked for this order yet.';
-    return list
-      .slice(-8)
-      .map((m) => `${m.role}: ${m.text}`)
-      .join('\n');
-  }, [matchedCall, messagesByCall]);
-
-  const monthlyRevenue = useMemo(
-    () => `$${(orders.reduce((sum, o) => sum + (o.total_cents ?? 0), 0) / 100).toFixed(2)}`,
-    [orders]
-  );
-
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-[1500px]">
-        <TopNav />
+    <main className="min-h-screen px-4 py-5 sm:px-8">
+      <div className="mx-auto max-w-[1520px]">
+        <header className="rounded-full border border-slate-200 bg-white px-8 py-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-10 text-sm font-semibold text-slate-800">
+              <span className="text-4xl font-black tracking-tight">◉ Loman</span>
+              <span>Features</span>
+              <span>Use Cases</span>
+              <span>Integrations</span>
+              <span>Partners</span>
+              <span>Careers</span>
+            </div>
+            <div className="flex items-center gap-8">
+              <span className="text-sm font-semibold">Login</span>
+              <button className="rounded-full bg-black px-8 py-3 text-sm font-semibold text-white">Schedule a demo</button>
+            </div>
+          </div>
+        </header>
 
-        <section className="mt-4 rounded-[28px] border border-slate-200 bg-white/95 p-3 shadow-[0_10px_40px_rgba(15,23,42,0.08)] lg:p-4">
-          <div className="grid gap-4 lg:grid-cols-[260px_1fr_340px]">
-            <Sidebar />
+        <section className="mt-6 rounded-[26px] bg-[#1f2023] p-4 shadow-[0_24px_50px_rgba(15,23,42,0.22)]">
+          <div className="rounded-[20px] border border-slate-300 bg-[#f7f7f8] p-4">
+            <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+              <aside className="rounded-2xl border border-slate-200 bg-white p-3">
+                <p className="px-2 py-3 text-3xl font-black tracking-tight">◉ Loman</p>
+                <ul className="mt-2 space-y-1 text-[30px] font-medium text-slate-700">
+                  <li className="rounded-xl px-3 py-2">Overview</li>
+                  <li className="rounded-xl bg-slate-100 px-3 py-2 font-semibold text-slate-900">Calls &amp; Orders</li>
+                  <li className="rounded-xl px-3 py-2">Reports <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[18px] text-emerald-800">New</span></li>
+                  <li className="rounded-xl px-3 py-2">Earnings</li>
+                  <li className="rounded-xl px-3 py-2">Settings</li>
+                  <li className="rounded-xl px-3 py-2">Support</li>
+                </ul>
+                <div className="mt-8 rounded-xl bg-emerald-100 px-3 py-2 text-[20px] font-semibold text-emerald-800">Active - Handling calls</div>
+              </aside>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Calls &amp; Orders</h1>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800">Active</span>
-              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h1 className="text-5xl font-bold tracking-tight text-slate-900">☎ Calls &amp; Orders</h1>
+                  <span className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[20px] font-medium text-slate-700">📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span></span>
+                </div>
 
-              {!hasSupabaseConfig ? (
-                <p className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">
-                  Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable live data.
-                </p>
-              ) : null}
+                {!hasSupabaseConfig ? (
+                  <p className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.</p>
+                ) : null}
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <Metric label="Revenue" value={monthlyRevenue} sub="This period" />
-                <Metric label="Orders" value={String(orders.length)} sub="All" />
-                <Metric label="Calls" value={String(calls.length)} sub="Captured" />
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search by phone, customer name or pickup time..."
-                  className="min-w-[280px] flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-cyan-300 focus:ring"
+                  placeholder="Search by phone number, caller name or call summary..."
+                  className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-[20px] outline-none focus:ring-2 focus:ring-indigo-200"
                 />
-                <button className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">Orders only</button>
-              </div>
 
-              <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2">Phone</th>
-                      <th className="px-3 py-2">Name</th>
-                      <th className="px-3 py-2">Pickup</th>
-                      <th className="px-3 py-2">Items</th>
-                      <th className="px-3 py-2">Total</th>
-                      <th className="px-3 py-2">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredOrders.length === 0 ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[20px] text-slate-700">📋 Orders Only</button>
+                  <button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[20px] text-slate-700">📅 Date Range</button>
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+                  <table className="min-w-full text-[20px]">
+                    <thead className="bg-slate-100 text-left text-[18px] uppercase tracking-wide text-slate-600">
                       <tr>
-                        <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
-                          No orders found
-                        </td>
+                        <th className="px-3 py-2">Phone Number</th>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Time</th>
+                        <th className="px-3 py-2">Items</th>
+                        <th className="px-3 py-2">Total</th>
+                        <th className="px-3 py-2">Type</th>
+                        <th className="px-3 py-2">Duration</th>
                       </tr>
-                    ) : (
-                      filteredOrders.map((order) => {
-                        const active = order.id === selectedOrderId;
-                        const itemsCount = (itemsByOrder.get(order.id) ?? []).length;
-                        return (
-                          <tr
-                            key={order.id}
-                            className={`cursor-pointer border-t border-slate-200 ${active ? 'bg-indigo-50/70' : 'bg-white hover:bg-slate-50'}`}
-                            onClick={() => setSelectedOrderId(order.id)}
-                          >
-                            <td className="px-3 py-3 font-medium text-slate-800">{order.caller_phone ?? 'Restaurant Caller'}</td>
-                            <td className="px-3 py-3 text-slate-700">{order.customer_name}</td>
-                            <td className="px-3 py-3 text-slate-600">{order.pickup_time}</td>
-                            <td className="px-3 py-3 text-indigo-600">{itemsCount} item{itemsCount === 1 ? '' : 's'}</td>
-                            <td className="px-3 py-3 font-semibold text-slate-900">${(order.total_cents / 100).toFixed(2)}</td>
-                            <td className="px-3 py-3"><StatusChip status={order.status} /></td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filtered.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-3 py-6 text-center text-slate-500">No orders yet</td>
+                        </tr>
+                      ) : (
+                        filtered.map((order) => {
+                          const count = itemsByOrder.get(order.id) ?? 0;
+                          return (
+                            <tr key={order.id} className="border-t border-slate-200 bg-white">
+                              <td className="px-3 py-3 font-semibold text-slate-800">{order.caller_phone ?? 'Restaurant Caller'}</td>
+                              <td className="px-3 py-3 text-slate-700">{order.customer_name}</td>
+                              <td className="px-3 py-3 text-slate-700">{order.pickup_time}</td>
+                              <td className="px-3 py-3 text-indigo-600">{count} item{count === 1 ? '' : 's'}</td>
+                              <td className="px-3 py-3 font-bold text-slate-900">${(order.total_cents / 100).toFixed(2)}</td>
+                              <td className="px-3 py-3">Pickup</td>
+                              <td className="px-3 py-3 text-slate-500">0m 00s</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-
-            <aside className="rounded-2xl border border-slate-200 bg-white p-4 lg:max-h-[calc(100vh-220px)] lg:overflow-auto">
-              {selectedOrder ? (
-                <>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xl font-semibold text-slate-900">{selectedOrder.customer_name}</p>
-                      <p className="text-sm text-slate-500">{selectedOrder.caller_phone ?? 'Restaurant Caller'}</p>
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">${(selectedOrder.total_cents / 100).toFixed(2)}</p>
-                  </div>
-
-                  <div className="mt-3 flex items-center gap-2">
-                    <StatusChip status={selectedOrder.status} />
-                    <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">ASAP</span>
-                    <span className="rounded-lg bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">Pickup</span>
-                  </div>
-
-                  <div className="mt-4 rounded-xl border border-slate-200 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Order Items</p>
-                    <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                      {selectedItems.length === 0 ? <li>No line items</li> : null}
-                      {selectedItems.map((item) => (
-                        <li key={item.id}>
-                          <span className="font-semibold">{item.qty}x</span> {item.menu_items?.name ?? 'Menu item'}
-                          <span className="float-right font-medium">${(item.line_total_cents / 100).toFixed(2)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {selectedOrder.notes ? (
-                    <div className="mt-4 rounded-xl border border-slate-200 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</p>
-                      <p className="mt-1 text-sm text-slate-700">{selectedOrder.notes}</p>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 rounded-xl border border-slate-200 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversation Summary</p>
-                    <pre className="mt-2 whitespace-pre-wrap font-sans text-sm text-slate-700">{conversationSummary}</pre>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-slate-500">Select an order to view details.</p>
-              )}
-            </aside>
           </div>
         </section>
       </div>
     </main>
   );
-}
-
-function TopNav() {
-  return (
-    <header className="rounded-full border border-slate-200 bg-white px-6 py-3 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-8 text-sm font-medium text-slate-800">
-          <span className="text-2xl font-black tracking-tight">New Delhi Ops</span>
-          <span>Overview</span>
-          <span>Calls &amp; Orders</span>
-          <span>Reports</span>
-          <span>Settings</span>
-        </div>
-        <button className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white">Restaurant Active</button>
-      </div>
-    </header>
-  );
-}
-
-function Sidebar() {
-  const items = ['Overview', 'Calls & Orders', 'Reports', 'Earnings', 'Settings', 'Support'];
-  return (
-    <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      <p className="px-2 py-3 text-xl font-black tracking-tight text-slate-900">New Delhi</p>
-      <ul className="space-y-1">
-        {items.map((item) => (
-          <li
-            key={item}
-            className={`rounded-xl px-3 py-2 text-sm font-medium ${item === 'Calls & Orders' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}
-          >
-            {item}
-          </li>
-        ))}
-      </ul>
-      <div className="mt-6 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800">Active - Handling calls</div>
-    </aside>
-  );
-}
-
-function Metric({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-sm text-slate-600">{label}</p>
-      <p className="mt-1 text-4xl font-semibold tracking-tight text-slate-900">{value}</p>
-      <p className="text-xs text-slate-500">{sub}</p>
-    </article>
-  );
-}
-
-function StatusChip({ status }: { status: string }) {
-  const s = status.toLowerCase();
-  const cls =
-    s === 'new'
-      ? 'bg-orange-100 text-orange-800'
-      : s === 'confirmed'
-      ? 'bg-emerald-100 text-emerald-800'
-      : s === 'completed'
-      ? 'bg-slate-200 text-slate-700'
-      : s === 'in_progress'
-      ? 'bg-cyan-100 text-cyan-800'
-      : 'bg-slate-100 text-slate-700';
-
-  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>{status}</span>;
 }
