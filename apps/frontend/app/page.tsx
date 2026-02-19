@@ -83,45 +83,45 @@ export default function HomePage() {
   }, [orders, query]);
 
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-8">
+    <main className="min-h-screen px-3 py-4 sm:px-6">
       <div className="mx-auto max-w-[1520px]">
-        <header className="rounded-full border border-slate-200 bg-white px-8 py-4 shadow-sm">
+        <header className="rounded-full border border-slate-200 bg-white px-6 py-3 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-10 text-sm font-semibold text-slate-800">
-              <span className="text-4xl font-black tracking-tight">◉ Loman</span>
+            <div className="flex items-center gap-8 text-xs font-semibold text-slate-800 sm:text-sm">
+              <span className="text-2xl font-black tracking-tight">◉ Loman</span>
               <span>Features</span>
               <span>Use Cases</span>
               <span>Integrations</span>
               <span>Partners</span>
               <span>Careers</span>
             </div>
-            <div className="flex items-center gap-8">
+            <div className="flex items-center gap-5">
               <span className="text-sm font-semibold">Login</span>
-              <button className="rounded-full bg-black px-8 py-3 text-sm font-semibold text-white">Schedule a demo</button>
+              <button className="rounded-full bg-black px-6 py-2 text-sm font-semibold text-white">Schedule a demo</button>
             </div>
           </div>
         </header>
 
-        <section className="mt-6 rounded-[26px] bg-[#1f2023] p-4 shadow-[0_24px_50px_rgba(15,23,42,0.22)]">
-          <div className="rounded-[20px] border border-slate-300 bg-[#f7f7f8] p-4">
-            <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+        <section className="mt-4 rounded-[22px] bg-[#1f2023] p-3 shadow-[0_18px_40px_rgba(15,23,42,0.2)]">
+          <div className="rounded-[16px] border border-slate-300 bg-[#f7f7f8] p-3">
+            <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
               <aside className="rounded-2xl border border-slate-200 bg-white p-3">
-                <p className="px-2 py-3 text-3xl font-black tracking-tight">◉ Loman</p>
-                <ul className="mt-2 space-y-1 text-[30px] font-medium text-slate-700">
+                <p className="px-2 py-2 text-2xl font-black tracking-tight">◉ Loman</p>
+                <ul className="mt-2 space-y-1 text-[16px] font-medium text-slate-700">
                   <li className="rounded-xl px-3 py-2">Overview</li>
                   <li className="rounded-xl bg-slate-100 px-3 py-2 font-semibold text-slate-900">Calls &amp; Orders</li>
-                  <li className="rounded-xl px-3 py-2">Reports <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[18px] text-emerald-800">New</span></li>
+                  <li className="rounded-xl px-3 py-2">Reports <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-800">New</span></li>
                   <li className="rounded-xl px-3 py-2">Earnings</li>
                   <li className="rounded-xl px-3 py-2">Settings</li>
                   <li className="rounded-xl px-3 py-2">Support</li>
                 </ul>
-                <div className="mt-8 rounded-xl bg-emerald-100 px-3 py-2 text-[20px] font-semibold text-emerald-800">Active - Handling calls</div>
+                <div className="mt-6 rounded-xl bg-emerald-100 px-3 py-2 text-[13px] font-semibold text-emerald-800">Active - Handling calls</div>
               </aside>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h1 className="text-5xl font-bold tracking-tight text-slate-900">☎ Calls &amp; Orders</h1>
-                  <span className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[20px] font-medium text-slate-700">📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span></span>
+                  <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">☎ Calls &amp; Orders</h1>
+                  <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[14px] font-medium text-slate-700">📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span></span>
                 </div>
 
                 {!hasSupabaseConfig ? (
@@ -132,17 +132,17 @@ export default function HomePage() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search by phone number, caller name or call summary..."
-                  className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-[20px] outline-none focus:ring-2 focus:ring-indigo-200"
+                  className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-[15px] outline-none focus:ring-2 focus:ring-indigo-200"
                 />
 
                 <div className="mt-3 flex items-center gap-2">
-                  <button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[20px] text-slate-700">📋 Orders Only</button>
-                  <button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[20px] text-slate-700">📅 Date Range</button>
+                  <button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[14px] text-slate-700">📋 Orders Only</button>
+                  <button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[14px] text-slate-700">📅 Date Range</button>
                 </div>
 
                 <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-                  <table className="min-w-full text-[20px]">
-                    <thead className="bg-slate-100 text-left text-[18px] uppercase tracking-wide text-slate-600">
+                  <table className="min-w-full text-[15px]">
+                    <thead className="bg-slate-100 text-left text-[12px] uppercase tracking-wide text-slate-600">
                       <tr>
                         <th className="px-3 py-2">Phone Number</th>
                         <th className="px-3 py-2">Name</th>
