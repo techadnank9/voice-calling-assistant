@@ -15,13 +15,19 @@ export async function upsertCall(params: {
   startedAt?: string;
   endedAt?: string;
 }) {
+  const { data: existing } = await supabase
+    .from('calls')
+    .select('from_number,to_number,started_at,ended_at')
+    .eq('twilio_call_sid', params.twilioCallSid)
+    .maybeSingle();
+
   const payload = {
     twilio_call_sid: params.twilioCallSid,
-    from_number: params.fromNumber ?? null,
-    to_number: params.toNumber ?? null,
+    from_number: params.fromNumber ?? existing?.from_number ?? null,
+    to_number: params.toNumber ?? existing?.to_number ?? null,
     status: params.status,
-    started_at: params.startedAt ?? null,
-    ended_at: params.endedAt ?? null
+    started_at: params.startedAt ?? existing?.started_at ?? null,
+    ended_at: params.endedAt ?? existing?.ended_at ?? null
   };
 
   const { error } = await supabase.from('calls').upsert(payload, {

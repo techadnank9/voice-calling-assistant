@@ -14,8 +14,17 @@ type Call = {
   ended_at: string | null;
 };
 
+type CallMessage = {
+  id: string;
+  call_id: string;
+  role: string;
+  text: string;
+  created_at: string;
+};
+
 export default function CallsPage() {
   const [calls, setCalls] = useState<Call[]>([]);
+  const [messages, setMessages] = useState<CallMessage[]>([]);
 
   useEffect(() => {
     const client = supabase;
@@ -28,7 +37,23 @@ export default function CallsPage() {
         .order('created_at', { ascending: false })
         .limit(50);
 
-      setCalls((data as Call[]) ?? []);
+      const callRows = (data as Call[]) ?? [];
+      setCalls(callRows);
+
+      if (callRows.length === 0) {
+        setMessages([]);
+        return;
+      }
+
+      const callIds = callRows.map((c) => c.id);
+      const { data: msgData } = await client
+        .from('call_messages')
+        .select('id,call_id,role,text,created_at')
+        .in('call_id', callIds)
+        .order('created_at', { ascending: true })
+        .limit(400);
+
+      setMessages((msgData as CallMessage[]) ?? []);
     };
 
     load().catch(console.error);
@@ -48,6 +73,16 @@ export default function CallsPage() {
     const completed = calls.filter((c) => c.status === 'completed').length;
     return { total: calls.length, active, completed };
   }, [calls]);
+
+  const messagesByCall = useMemo(() => {
+    const map = new Map<string, CallMessage[]>();
+    for (const message of messages) {
+      const bucket = map.get(message.call_id) ?? [];
+      bucket.push(message);
+      map.set(message.call_id, bucket);
+    }
+    return map;
+  }, [messages]);
 
   return (
     <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
@@ -96,6 +131,20 @@ export default function CallsPage() {
                 </div>
                 <p className="mt-1 text-xs text-slate-500">SID: {call.twilio_call_sid}</p>
                 <p className="mt-1 text-xs text-slate-500">Started: {format(call.started_at)} | Ended: {format(call.ended_at)}</p>
+                <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Conversation Preview</p>
+                  {((messagesByCall.get(call.id) ?? []).length === 0) ? (
+                    <p className="mt-1 text-xs text-slate-400">No transcript captured for this call.</p>
+                  ) : (
+                    <ul className="mt-1 space-y-1 text-xs text-slate-700">
+                      {(messagesByCall.get(call.id) ?? []).slice(-4).map((message) => (
+                        <li key={message.id}>
+                          <span className="font-semibold">{message.role}:</span> {message.text}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             ))
           )}
