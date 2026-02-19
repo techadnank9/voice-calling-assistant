@@ -3,14 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
-type Call = {
-  id: string;
-  twilio_call_sid: string;
-  from_number: string | null;
-  status: string;
-  started_at: string | null;
-};
-
 type Order = {
   id: string;
   customer_name: string;
@@ -18,6 +10,17 @@ type Order = {
   status: string;
   total_cents?: number;
   notes?: string | null;
+  caller_phone?: string | null;
+  created_at?: string;
+};
+
+type OrderItem = {
+  id: string;
+  order_id: string;
+  qty: number;
+  line_total_cents: number;
+  menu_item_id?: string | null;
+  menu_items?: { name?: string | null } | null;
 };
 
 type Reservation = {
@@ -26,12 +29,11 @@ type Reservation = {
   party_size: number;
   reservation_time: string;
   status: string;
-  notes?: string | null;
 };
 
 export default function HomePage() {
-  const [calls, setCalls] = useState<Call[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
 
   useEffect(() => {
@@ -39,35 +41,44 @@ export default function HomePage() {
     if (!client) return;
 
     const load = async () => {
-      const [{ data: callsData }, { data: ordersData }, { data: reservationData }] = await Promise.all([
-        client
-          .from('calls')
-          .select('id,twilio_call_sid,from_number,status,started_at')
-          .order('started_at', { ascending: false })
-          .limit(20),
+      const [{ data: ordersData }, { data: reservationData }] = await Promise.all([
         client
           .from('orders')
-          .select('id,customer_name,pickup_time,status,total_cents,notes')
+          .select('id,customer_name,pickup_time,status,total_cents,notes,caller_phone,created_at')
           .order('created_at', { ascending: false })
-          .limit(20),
+          .limit(40),
         client
           .from('reservations')
-          .select('id,guest_name,party_size,reservation_time,status,notes')
+          .select('id,guest_name,party_size,reservation_time,status')
           .order('created_at', { ascending: false })
           .limit(20)
       ]);
 
-      setCalls((callsData as Call[]) ?? []);
-      setOrders((ordersData as Order[]) ?? []);
+      const orderRows = (ordersData as Order[]) ?? [];
+      setOrders(orderRows);
       setReservations((reservationData as Reservation[]) ?? []);
+
+      if (orderRows.length === 0) {
+        setOrderItems([]);
+        return;
+      }
+
+      const orderIds = orderRows.map((o) => o.id);
+      const { data: itemData } = await client
+        .from('order_items')
+        .select('id,order_id,qty,line_total_cents,menu_item_id,menu_items(name)')
+        .in('order_id', orderIds)
+        .order('created_at', { ascending: true });
+
+      setOrderItems((itemData as OrderItem[]) ?? []);
     };
 
     load().catch(console.error);
 
     const channel = client
       .channel('dashboard-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'calls' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => load())
       .subscribe();
 
@@ -77,19 +88,28 @@ export default function HomePage() {
   }, []);
 
   const stats = useMemo(() => {
-    const activeCalls = calls.filter((c) => c.status === 'in_progress').length;
     const newOrders = orders.filter((o) => o.status === 'new').length;
     const confirmedReservations = reservations.filter((r) => r.status === 'confirmed').length;
-    const todaysRevenue = orders.reduce((sum, order) => sum + (order.total_cents ?? 0), 0);
-    return { activeCalls, newOrders, confirmedReservations, todaysRevenue };
-  }, [calls, orders, reservations]);
+    const gross = orders.reduce((sum, o) => sum + (o.total_cents ?? 0), 0);
+    return { newOrders, confirmedReservations, gross };
+  }, [orders, reservations]);
+
+  const itemsByOrder = useMemo(() => {
+    const map = new Map<string, OrderItem[]>();
+    for (const item of orderItems) {
+      const bucket = map.get(item.order_id) ?? [];
+      bucket.push(item);
+      map.set(item.order_id, bucket);
+    }
+    return map;
+  }, [orderItems]);
 
   return (
     <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
       <header className="rounded-3xl border border-slate-200/60 bg-white/80 p-6 shadow-sm backdrop-blur">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Operations Dashboard</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">New Delhi Restaurant</h1>
-        <p className="mt-2 text-slate-600">Live voice orders and reservations from Twilio + Deepgram</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Restaurant Ops</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Orders Dashboard</h1>
+        <p className="mt-2 text-slate-600">All incoming orders with full details from the voice agent</p>
         {!hasSupabaseConfig ? (
           <p className="mt-4 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">
             Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable live dashboard data.
@@ -97,90 +117,71 @@ export default function HomePage() {
         ) : null}
       </header>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Active Calls" value={String(stats.activeCalls)} color="cyan" />
-        <StatCard label="New Orders" value={String(stats.newOrders)} color="orange" />
-        <StatCard label="Confirmed Reservations" value={String(stats.confirmedReservations)} color="emerald" />
-        <StatCard label="Order Total" value={`$${(stats.todaysRevenue / 100).toFixed(2)}`} color="violet" />
+      <section className="mt-6 grid gap-4 sm:grid-cols-3">
+        <StatCard label="New Orders" value={String(stats.newOrders)} tone="orange" />
+        <StatCard label="Confirmed Reservations" value={String(stats.confirmedReservations)} tone="emerald" />
+        <StatCard label="Order Revenue" value={`$${(stats.gross / 100).toFixed(2)}`} tone="cyan" />
       </section>
 
       <section className="mt-6 grid gap-6 xl:grid-cols-12">
-        <article className="xl:col-span-4 rounded-3xl border border-slate-200/70 bg-white/85 p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Live Calls</h2>
-            <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-xs font-semibold text-cyan-800">{calls.length}</span>
-          </div>
-          <div className="mt-4 space-y-3">
-            {calls.length === 0 ? <Empty text="No calls yet" /> : null}
-            {calls.map((call) => (
-              <div key={call.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-medium text-slate-800">{call.from_number ?? 'Unknown caller'}</p>
-                  <StatusChip status={call.status} />
-                </div>
-                <p className="mt-1 text-xs text-slate-500">Call SID: {call.twilio_call_sid.slice(0, 12)}...</p>
-                <p className="mt-1 text-xs text-slate-500">Started: {formatTime(call.started_at)}</p>
-              </div>
-            ))}
-          </div>
-        </article>
+        <article className="xl:col-span-9 rounded-3xl border border-slate-200/70 bg-white/85 p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Incoming Orders</h2>
+          <div className="mt-4 space-y-4">
+            {orders.length === 0 ? <Empty text="No orders yet" /> : null}
+            {orders.map((order) => {
+              const items = itemsByOrder.get(order.id) ?? [];
+              return (
+                <div key={order.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-base font-semibold text-slate-900">{order.customer_name}</p>
+                    <StatusChip status={order.status} />
+                  </div>
 
-        <article className="xl:col-span-5 rounded-3xl border border-slate-200/70 bg-white/85 p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Recent Orders</h2>
-            <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800">{orders.length}</span>
-          </div>
-          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
-                <tr>
-                  <th className="px-3 py-2">Customer</th>
-                  <th className="px-3 py-2">Pickup</th>
-                  <th className="px-3 py-2">Total</th>
-                  <th className="px-3 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-3 py-4 text-center text-slate-500">
-                      No orders yet
-                    </td>
-                  </tr>
-                ) : (
-                  orders.map((order) => (
-                    <tr key={order.id} className="border-t border-slate-200">
-                      <td className="px-3 py-2 text-slate-800">{order.customer_name}</td>
-                      <td className="px-3 py-2 text-slate-600">{order.pickup_time}</td>
-                      <td className="px-3 py-2 text-slate-700">${((order.total_cents ?? 0) / 100).toFixed(2)}</td>
-                      <td className="px-3 py-2">
-                        <StatusChip status={order.status} />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  <div className="mt-2 grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-4">
+                    <p>Pickup: <span className="font-medium">{order.pickup_time}</span></p>
+                    <p>Phone: <span className="font-medium">{order.caller_phone ?? 'N/A'}</span></p>
+                    <p>Total: <span className="font-medium">${((order.total_cents ?? 0) / 100).toFixed(2)}</span></p>
+                    <p>Created: <span className="font-medium">{formatTime(order.created_at ?? null)}</span></p>
+                  </div>
+
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</p>
+                    {items.length === 0 ? (
+                      <p className="mt-2 text-sm text-slate-500">No line items recorded</p>
+                    ) : (
+                      <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                        {items.map((item) => (
+                          <li key={item.id}>
+                            {item.qty}x {item.menu_items?.name ?? 'Menu item'} - ${((item.line_total_cents ?? 0) / 100).toFixed(2)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {order.notes ? (
+                    <p className="mt-3 text-sm text-slate-700">
+                      <span className="font-semibold">Notes:</span> {order.notes}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </article>
 
         <article className="xl:col-span-3 rounded-3xl border border-slate-200/70 bg-white/85 p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Reservations</h2>
-            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-              {reservations.length}
-            </span>
-          </div>
+          <h2 className="text-lg font-semibold text-slate-900">Reservations</h2>
           <div className="mt-4 space-y-3">
             {reservations.length === 0 ? <Empty text="No reservations yet" /> : null}
-            {reservations.map((reservation) => (
-              <div key={reservation.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            {reservations.map((r) => (
+              <div key={r.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="font-medium text-slate-800">{reservation.guest_name}</p>
-                  <StatusChip status={reservation.status} />
+                  <p className="font-medium text-slate-800">{r.guest_name}</p>
+                  <StatusChip status={r.status} />
                 </div>
-                <p className="mt-1 text-sm text-slate-600">Party {reservation.party_size}</p>
-                <p className="mt-1 text-xs text-slate-500">{reservation.reservation_time}</p>
+                <p className="mt-1 text-sm text-slate-600">Party {r.party_size}</p>
+                <p className="mt-1 text-xs text-slate-500">{r.reservation_time}</p>
               </div>
             ))}
           </div>
@@ -190,16 +191,15 @@ export default function HomePage() {
   );
 }
 
-function StatCard({ label, value, color }: { label: string; value: string; color: 'cyan' | 'orange' | 'emerald' | 'violet' }) {
-  const styles: Record<typeof color, string> = {
-    cyan: 'bg-cyan-50 border-cyan-100 text-cyan-900',
+function StatCard({ label, value, tone }: { label: string; value: string; tone: 'orange' | 'emerald' | 'cyan' }) {
+  const palette = {
     orange: 'bg-orange-50 border-orange-100 text-orange-900',
     emerald: 'bg-emerald-50 border-emerald-100 text-emerald-900',
-    violet: 'bg-violet-50 border-violet-100 text-violet-900'
-  };
+    cyan: 'bg-cyan-50 border-cyan-100 text-cyan-900'
+  }[tone];
 
   return (
-    <article className={`rounded-2xl border p-4 shadow-sm ${styles[color]}`}>
+    <article className={`rounded-2xl border p-4 shadow-sm ${palette}`}>
       <p className="text-xs font-semibold uppercase tracking-wide opacity-75">{label}</p>
       <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>
     </article>
@@ -207,19 +207,19 @@ function StatCard({ label, value, color }: { label: string; value: string; color
 }
 
 function StatusChip({ status }: { status: string }) {
-  const normalized = status.toLowerCase();
-  const style =
-    normalized === 'in_progress'
-      ? 'bg-cyan-100 text-cyan-800'
-      : normalized === 'new'
+  const s = status.toLowerCase();
+  const cls =
+    s === 'new'
       ? 'bg-orange-100 text-orange-800'
-      : normalized === 'confirmed'
+      : s === 'confirmed'
       ? 'bg-emerald-100 text-emerald-800'
-      : normalized === 'completed'
+      : s === 'completed'
       ? 'bg-slate-200 text-slate-700'
+      : s === 'in_progress'
+      ? 'bg-cyan-100 text-cyan-800'
       : 'bg-slate-100 text-slate-700';
 
-  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>{status}</span>;
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>{status}</span>;
 }
 
 function Empty({ text }: { text: string }) {
@@ -228,7 +228,7 @@ function Empty({ text }: { text: string }) {
 
 function formatTime(value: string | null) {
   if (!value) return 'N/A';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
 }
