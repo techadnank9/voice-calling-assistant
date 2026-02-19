@@ -102,9 +102,8 @@ export default function HomePage() {
           </div>
         </header>
 
-        <section className="mt-4 rounded-[22px] bg-[#1f2023] p-3 shadow-[0_18px_40px_rgba(15,23,42,0.2)]">
-          <div className="rounded-[16px] border border-slate-300 bg-[#f7f7f8] p-3">
-            <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
+        <section className="mt-4 rounded-[16px] border border-slate-300 bg-[#f7f7f8] p-3 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+          <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
               <aside className="rounded-2xl border border-slate-200 bg-white p-3">
                 <p className="px-2 py-2 text-2xl font-black tracking-tight">◉ Loman</p>
                 <ul className="mt-2 space-y-1 text-[16px] font-medium text-slate-700">
@@ -179,7 +178,6 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
-          </div>
         </section>
       </div>
     </main>
