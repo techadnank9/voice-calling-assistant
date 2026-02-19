@@ -62,6 +62,13 @@ export class DeepgramCallSession {
       if (kind === 'Welcome') {
         this.deepgramReady = true;
         const menuPrompt = await buildMenuGuardPrompt().catch(() => 'Menu unavailable.');
+        const stylePrompt = [
+          'You are speaking live on a phone call, so sound like a real human host.',
+          'Use short, natural turns with warm acknowledgements.',
+          'Do not sound robotic and do not repeat fixed phrases.',
+          'Ask one clear follow-up question at a time.',
+          'Confirm key details naturally before finalizing.'
+        ].join(' ');
         const settingsPayload = {
           type: 'Settings',
           audio: {
@@ -87,9 +94,9 @@ export class DeepgramCallSession {
             think: {
               provider: {
                 type: 'open_ai',
-                model: 'gpt-4o-mini'
+                model: 'gpt-4o'
               },
-              prompt: menuPrompt
+              prompt: `${stylePrompt}\n\n${menuPrompt}`
             },
             speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } },
             greeting:
@@ -100,7 +107,7 @@ export class DeepgramCallSession {
           {
             callSid: this.twilioCallSid,
             thinkProvider: 'open_ai',
-            thinkModel: 'gpt-4o-mini',
+            thinkModel: 'gpt-4o',
             listenModel: 'nova-3',
             voiceModel: 'aura-2-thalia-en'
           },
