@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { OpsShell } from '../components/OpsShell';
 import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
 type Order = {
@@ -27,6 +28,7 @@ export default function HomePage() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [query, setQuery] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [liveConversationSummary, setLiveConversationSummary] = useState<string>('');
 
   useEffect(() => {
     const client = supabase;
@@ -93,29 +95,95 @@ export default function HomePage() {
     () => orders.find((o) => o.id === selectedOrderId) ?? null,
     [orders, selectedOrderId]
   );
+  const selectedOrderSummary = useMemo(() => {
+    if (!selectedOrder?.notes) return '';
+    return selectedOrder.notes.replace(/\[auto:[^\]]+\]\s*auto-captured from transcript/gi, '').trim();
+  }, [selectedOrder]);
+  const selectedOrderConversationSummary = useMemo(() => {
+    if (!selectedOrder) return '';
+    if (liveConversationSummary.trim()) return liveConversationSummary;
+    if (selectedOrderSummary) return selectedOrderSummary;
+
+    const selectedItems = itemsByOrder.get(selectedOrder.id) ?? [];
+    const itemText =
+      selectedItems.length > 0
+        ? selectedItems
+            .map((item) => `${item.qty ?? 1}x ${item.menu_items?.name ?? 'item'}`)
+            .slice(0, 4)
+            .join(', ')
+        : 'their requested items';
+
+    return [
+      `${selectedOrder.customer_name} called to place a pickup order.`,
+      `They ordered ${itemText}.`,
+      `Pickup was confirmed for ${selectedOrder.pickup_time}.`,
+      `Total confirmed: $${(selectedOrder.total_cents / 100).toFixed(2)}.`
+    ].join(' ');
+  }, [selectedOrder, selectedOrderSummary, liveConversationSummary, itemsByOrder]);
+
+  useEffect(() => {
+    const client = supabase;
+    const order = selectedOrder;
+    if (!client || !order || !order.caller_phone) {
+      setLiveConversationSummary('');
+      return;
+    }
+
+    const buildSummary = async () => {
+      const { data: callRows } = await client
+        .from('calls')
+        .select('id,created_at,from_number')
+        .eq('from_number', order.caller_phone)
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      const callId = (callRows as Array<{ id: string }> | null)?.[0]?.id;
+      if (!callId) {
+        setLiveConversationSummary('');
+        return;
+      }
+
+      const { data: messageRows } = await client
+        .from('call_messages')
+        .select('role,text,created_at')
+        .eq('call_id', callId)
+        .order('created_at', { ascending: true })
+        .limit(80);
+
+      const rows = (messageRows as Array<{ role: string; text: string }> | null) ?? [];
+      if (rows.length === 0) {
+        setLiveConversationSummary('');
+        return;
+      }
+
+      const lastTurns = rows.slice(-8);
+      const userLines = lastTurns
+        .filter((r) => r.role === 'user')
+        .map((r) => r.text.trim())
+        .filter(Boolean);
+      const assistantLines = lastTurns
+        .filter((r) => r.role === 'assistant')
+        .map((r) => r.text.trim())
+        .filter(Boolean);
+
+      const summary = [
+        userLines.length > 0 ? `Customer requested: ${userLines.join(' ')}` : null,
+        assistantLines.length > 0 ? `Agent confirmed: ${assistantLines.join(' ')}` : null
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      setLiveConversationSummary(summary);
+    };
+
+    buildSummary().catch(() => setLiveConversationSummary(''));
+  }, [selectedOrder]);
 
   return (
-    <main className="min-h-screen px-3 py-4 sm:px-6">
-      <div className="mx-auto max-w-[1520px]">
-        <section className="rounded-[16px] border border-slate-300 bg-[#f7f7f8] p-3 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
-          <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
-              <aside className="rounded-2xl border border-slate-200 bg-white p-3">
-                <p className="px-2 py-2 text-2xl font-black tracking-tight">◉ Loman</p>
-                <ul className="mt-2 space-y-1 text-[16px] font-medium text-slate-700">
-                  <li className="rounded-xl px-3 py-2">Overview</li>
-                  <li className="rounded-xl bg-slate-100 px-3 py-2 font-semibold text-slate-900">Calls &amp; Orders</li>
-                  <li className="rounded-xl px-3 py-2">Reports <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-800">New</span></li>
-                  <li className="rounded-xl px-3 py-2">Earnings</li>
-                  <li className="rounded-xl px-3 py-2">Settings</li>
-                  <li className="rounded-xl px-3 py-2">Support</li>
-                </ul>
-                <div className="mt-6 rounded-xl bg-emerald-100 px-3 py-2 text-[13px] font-semibold text-emerald-800">Active - Handling calls</div>
-              </aside>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <OpsShell active="orders">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">☎ Calls &amp; Orders</h1>
-                  <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[14px] font-medium text-slate-700">📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span></span>
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-5xl">☎ Calls &amp; Orders</h1>
+                  <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 sm:text-[14px]">📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span></span>
                 </div>
 
                 {!hasSupabaseConfig ? (
@@ -135,7 +203,7 @@ export default function HomePage() {
                 </div>
 
                 <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-                  <table className="min-w-full text-[15px]">
+                  <table className="hidden min-w-full text-[15px] md:table">
                     <thead className="bg-slate-100 text-left text-[12px] uppercase tracking-wide text-slate-600">
                       <tr>
                         <th className="px-3 py-2">Phone Number</th>
@@ -174,17 +242,47 @@ export default function HomePage() {
                       )}
                     </tbody>
                   </table>
+                  <div className="md:hidden">
+                    {filtered.length === 0 ? (
+                      <p className="px-3 py-6 text-center text-slate-500">No orders yet</p>
+                    ) : (
+                      <div className="space-y-2 p-2">
+                        {filtered.map((order) => {
+                          const count = (itemsByOrder.get(order.id) ?? []).length;
+                          return (
+                            <button
+                              key={order.id}
+                              onClick={() => setSelectedOrderId(order.id)}
+                              className={`w-full rounded-xl border px-3 py-3 text-left ${
+                                selectedOrderId === order.id
+                                  ? 'border-indigo-200 bg-indigo-50'
+                                  : 'border-slate-200 bg-white'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-base font-semibold text-slate-900">{order.customer_name}</p>
+                                <p className="text-base font-bold text-slate-900">${(order.total_cents / 100).toFixed(2)}</p>
+                              </div>
+                              <p className="mt-1 text-sm text-slate-600">{order.caller_phone ?? 'Restaurant Caller'}</p>
+                              <div className="mt-2 flex items-center justify-between text-sm">
+                                <span className="text-slate-600">{order.pickup_time}</span>
+                                <span className="font-medium text-indigo-600">
+                                  {count} item{count === 1 ? '' : 's'}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
-        </section>
-      </div>
       {selectedOrder ? (() => {
         const selectedItems = itemsByOrder.get(selectedOrder.id) ?? [];
         return (
         <>
         <div className="fixed inset-0 z-20 bg-slate-900/25" onClick={() => setSelectedOrderId(null)} />
-        <aside className="fixed inset-y-0 right-0 z-30 w-full max-w-md border-l border-slate-200 bg-white p-5 shadow-2xl">
+        <aside className="fixed inset-y-0 right-0 z-30 h-screen w-full max-w-md overflow-y-auto overscroll-contain border-l border-slate-200 bg-white p-5 shadow-2xl">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-lg font-bold text-emerald-700">
@@ -228,14 +326,12 @@ export default function HomePage() {
           <div className="mt-4 rounded-xl border border-slate-200 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversation Summary</p>
             <p className="mt-2 text-sm text-slate-700">
-              {selectedOrder.notes?.trim()
-                ? selectedOrder.notes
-                : `${selectedOrder.customer_name} placed a pickup order. The order details and pickup time were confirmed.`}
+              {selectedOrderConversationSummary}
             </p>
           </div>
         </aside>
         </>
       )})() : null}
-    </main>
+    </OpsShell>
   );
 }

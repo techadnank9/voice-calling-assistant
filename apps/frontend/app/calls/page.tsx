@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { OpsShell } from '../../components/OpsShell';
 import { hasSupabaseConfig, supabase } from '../../lib/supabase';
 
 type Call = {
@@ -85,17 +86,23 @@ export default function CallsPage() {
   }, [messages]);
 
   return (
-    <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
-      <header className="rounded-3xl border border-slate-200/60 bg-white/80 p-6 shadow-sm backdrop-blur">
-        <div className="flex items-center justify-between gap-4">
+    <OpsShell active="calls">
+      <header className="border-b border-slate-200 pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Restaurant Ops</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Live Calls</h1>
-            <p className="mt-2 text-slate-600">Track call status and call history from Twilio streams</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">Live Calls</h1>
+            <p className="mt-1 text-sm text-slate-600 sm:text-base">Track call status and call history from Twilio streams</p>
           </div>
-          <nav className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1">
+          <nav className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white p-1 md:flex">
             <Link href="/" className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
               Orders
+            </Link>
+            <Link
+              href="/reservations"
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+            >
+              Reservations
             </Link>
             <span className="rounded-lg bg-cyan-100 px-3 py-1.5 text-sm font-semibold text-cyan-900">Calls</span>
           </nav>
@@ -113,7 +120,7 @@ export default function CallsPage() {
         <Stat label="Completed" value={String(stats.completed)} />
       </section>
 
-      <section className="mt-6 rounded-3xl border border-slate-200/70 bg-white/85 p-5 shadow-sm">
+      <section className="mt-6">
         <h2 className="text-lg font-semibold text-slate-900">Call Stream</h2>
         <div className="mt-4 space-y-3">
           {calls.length === 0 ? (
@@ -150,13 +157,13 @@ export default function CallsPage() {
           )}
         </div>
       </section>
-    </main>
+    </OpsShell>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <article className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4 shadow-sm text-cyan-900">
+    <article className="rounded-xl border border-cyan-100 bg-cyan-50 p-4 text-cyan-900">
       <p className="text-xs font-semibold uppercase tracking-wide opacity-75">{label}</p>
       <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>
     </article>

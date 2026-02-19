@@ -69,7 +69,9 @@ export class DeepgramCallSession {
           'Use short, natural turns with warm acknowledgements.',
           'Do not sound robotic and do not repeat fixed phrases.',
           'Ask one clear follow-up question at a time.',
-          'Confirm key details naturally before finalizing.'
+          'Confirm key details naturally before finalizing.',
+          'Before creating any order or reservation, explicitly ask the customer name and confirm it.',
+          'For reservations, you must collect and confirm: guest full name, reservation date, reservation time, party size, and occasion.'
         ].join(' ');
         const settingsPayload = {
           type: 'Settings',
