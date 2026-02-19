@@ -5,6 +5,10 @@
 }
 
 body {
-  background: radial-gradient(circle at 20% 20%, #ffffff, #eef3f8 55%, #d9e3ee);
-  color: #101318;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 0% -10%, rgba(34, 211, 238, 0.16), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(249, 115, 22, 0.16), transparent 55%),
+    linear-gradient(180deg, #f6f9fc 0%, #edf2f8 55%, #e8eef6 100%);
+  color: #0f172a;
 }
