@@ -83,8 +83,14 @@ export class DeepgramCallSession {
                 smart_format: true
               }
             },
-            prompt:
-              'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.',
+            think: {
+              provider: {
+                type: 'open_ai',
+                model: 'gpt-4o-mini'
+              },
+              prompt:
+                'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.'
+            },
             speak: { provider: { type: 'deepgram', model: 'aura-2-asteria-en' } },
             greeting:
               'Hello, thanks for calling. I can help with pickup orders and table reservations. How can I help you today?'
@@ -93,7 +99,8 @@ export class DeepgramCallSession {
         logger.info(
           {
             callSid: this.twilioCallSid,
-            thinkProvider: 'managed-default',
+            thinkProvider: 'open_ai',
+            thinkModel: 'gpt-4o-mini',
             listenModel: 'nova-3',
             voiceModel: 'aura-2-asteria-en'
           },
