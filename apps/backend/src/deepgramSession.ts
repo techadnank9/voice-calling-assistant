@@ -61,8 +61,7 @@ export class DeepgramCallSession {
 
       if (kind === 'Welcome') {
         this.deepgramReady = true;
-        logger.info({ callSid: this.twilioCallSid }, 'Deepgram welcome received, sending settings');
-        this.sendDeepgram({
+        const settingsPayload = {
           type: 'Settings',
           audio: {
             input: {
@@ -79,15 +78,25 @@ export class DeepgramCallSession {
             listen: { provider: { type: 'deepgram' } },
             think: {
               provider: {
-                type: 'open_ai',
-                model: 'gpt-4o-mini'
+                type: 'deepgram',
+                model: 'nova-3'
               },
               prompt:
                 'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.'
             },
             speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
           }
-        });
+        };
+        logger.info(
+          {
+            callSid: this.twilioCallSid,
+            thinkProvider: 'deepgram',
+            thinkModel: 'nova-3',
+            voiceModel: 'aura-2-thalia-en'
+          },
+          'Deepgram welcome received, sending settings'
+        );
+        this.sendDeepgram(settingsPayload);
       }
 
       if (kind === 'UserStartedSpeaking') {
