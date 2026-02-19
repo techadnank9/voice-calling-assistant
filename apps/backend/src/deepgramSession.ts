@@ -5,11 +5,7 @@ import { createOrder, createReservation, insertEvent, insertMessage } from './su
 
 type TwilioMediaPayload = {
   event?: string;
-  sequenceNumber?: string;
-  media?: { payload?: string; track?: string; chunk?: string; timestamp?: string };
-  start?: { streamSid?: string; callSid?: string };
-  stop?: { accountSid?: string; callSid?: string };
-  streamSid?: string;
+  media?: { payload?: string };
 };
 
 type DeepgramEvent = {
@@ -23,6 +19,7 @@ export class DeepgramCallSession {
   private readonly twilioCallSid: string;
   private readonly streamSid: string;
   private deepgramWs: WebSocket | null = null;
+  private deepgramReady = false;
 
   constructor(params: { twilioWs: WebSocket; twilioCallSid: string; streamSid: string }) {
     this.twilioWs = params.twilioWs;
@@ -31,58 +28,68 @@ export class DeepgramCallSession {
   }
 
   connect() {
-    this.deepgramWs = new WebSocket(env.DEEPGRAM_AGENT_WS_URL, {
-      headers: {
-        Authorization: `Token ${env.DEEPGRAM_API_KEY}`
-      }
-    });
+    this.deepgramWs = new WebSocket(env.DEEPGRAM_AGENT_WS_URL, ['token', env.DEEPGRAM_API_KEY]);
 
     this.deepgramWs.on('open', () => {
-      logger.info({ callSid: this.twilioCallSid }, 'Deepgram session connected');
-
-      this.sendDeepgram({
-        type: 'SettingsConfiguration',
-        audio: {
-          input: {
-            encoding: 'mulaw',
-            sample_rate: 8000
-          },
-          output: {
-            encoding: 'mulaw',
-            sample_rate: 8000
-          }
-        },
-        agent: {
-          language: 'en-US',
-          prompt:
-            'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.'
-        }
-      });
+      logger.info({ callSid: this.twilioCallSid }, 'Deepgram websocket opened');
     });
 
-    this.deepgramWs.on('message', async (raw) => {
+    this.deepgramWs.on('message', async (raw, isBinary) => {
+      if (isBinary) {
+        const payload = Buffer.from(raw as Buffer).toString('base64');
+        this.twilioWs.send(
+          JSON.stringify({
+            event: 'media',
+            streamSid: this.streamSid,
+            media: { payload }
+          })
+        );
+        return;
+      }
+
       const text = raw.toString();
       let evt: DeepgramEvent;
-
       try {
         evt = JSON.parse(text) as DeepgramEvent;
       } catch {
+        logger.debug({ callSid: this.twilioCallSid, text }, 'Non-JSON Deepgram message');
         return;
       }
 
       const kind = String(evt.type ?? evt.event ?? 'unknown');
 
-      if (kind.toLowerCase().includes('audio')) {
-        const audioBase64 = this.extractAudioPayload(evt);
-        if (audioBase64) {
-          this.twilioWs.send(
-            JSON.stringify({
-              event: 'media',
-              streamSid: this.streamSid,
-              media: { payload: audioBase64 }
-            })
-          );
-        }
+      if (kind === 'Welcome') {
+        this.deepgramReady = true;
+        this.sendDeepgram({
+          type: 'Settings',
+          audio: {
+            input: {
+              encoding: 'mulaw',
+              sample_rate: 8000
+            },
+            output: {
+              encoding: 'mulaw',
+              sample_rate: 8000,
+              container: 'none'
+            }
+          },
+          agent: {
+            listen: { provider: { type: 'deepgram' } },
+            think: {
+              provider: {
+                type: 'open_ai',
+                model: 'gpt-4o-mini'
+              },
+              prompt:
+                'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.'
+            },
+            speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
+          }
+        });
+      }
+
+      if (kind === 'UserStartedSpeaking') {
+        this.twilioWs.send(JSON.stringify({ event: 'clear', streamSid: this.streamSid }));
       }
 
       if (kind.toLowerCase().includes('transcript')) {
@@ -107,7 +114,7 @@ export class DeepgramCallSession {
         }
       }
 
-      if (kind.toLowerCase().includes('tool')) {
+      if (kind.toLowerCase().includes('tool') || kind === 'FunctionCallRequest') {
         await this.handleToolEvent(evt);
       }
 
@@ -118,8 +125,15 @@ export class DeepgramCallSession {
       }).catch(() => undefined);
     });
 
-    this.deepgramWs.on('close', () => {
-      logger.info({ callSid: this.twilioCallSid }, 'Deepgram session closed');
+    this.deepgramWs.on('close', (code, reason) => {
+      logger.warn(
+        {
+          callSid: this.twilioCallSid,
+          code,
+          reason: reason.toString('utf8')
+        },
+        'Deepgram session closed'
+      );
     });
 
     this.deepgramWs.on('error', (error) => {
@@ -128,25 +142,23 @@ export class DeepgramCallSession {
   }
 
   handleTwilioEvent(event: TwilioMediaPayload) {
-    if (!this.deepgramWs || this.deepgramWs.readyState !== WebSocket.OPEN) return;
+    if (!this.deepgramWs || this.deepgramWs.readyState !== WebSocket.OPEN || !this.deepgramReady) return;
 
     if (event.event === 'media' && event.media?.payload) {
-      this.sendDeepgram({
-        type: 'AudioData',
-        audio: event.media.payload
-      });
+      const chunk = Buffer.from(event.media.payload, 'base64');
+      this.deepgramWs.send(chunk);
       return;
     }
 
     if (event.event === 'stop') {
-      this.sendDeepgram({ type: 'CloseStream' });
+      this.sendDeepgram({ type: 'Close' });
       this.deepgramWs.close();
     }
   }
 
   close() {
     if (this.deepgramWs && this.deepgramWs.readyState === WebSocket.OPEN) {
-      this.sendDeepgram({ type: 'CloseStream' });
+      this.sendDeepgram({ type: 'Close' });
       this.deepgramWs.close();
     }
   }
@@ -156,20 +168,12 @@ export class DeepgramCallSession {
     this.deepgramWs.send(JSON.stringify(payload));
   }
 
-  private extractAudioPayload(evt: DeepgramEvent): string | null {
-    const candidates = [
-      (evt.audio as { data?: string } | undefined)?.data,
-      (evt.audio as { payload?: string } | undefined)?.payload,
-      (evt as { data?: string }).data
-    ];
-    return candidates.find((value): value is string => typeof value === 'string') ?? null;
-  }
-
   private extractTranscript(evt: DeepgramEvent): string | null {
     const candidates = [
       (evt as { text?: string }).text,
       (evt as { transcript?: string }).transcript,
-      (evt as { message?: string }).message
+      (evt as { message?: string }).message,
+      (evt as { content?: string }).content
     ];
     return candidates.find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? null;
   }
@@ -177,10 +181,13 @@ export class DeepgramCallSession {
   private async handleToolEvent(evt: DeepgramEvent) {
     const name =
       (evt as { name?: string }).name ??
-      ((evt.tool as { name?: string } | undefined)?.name ?? (evt as { tool_name?: string }).tool_name);
+      ((evt as { function_name?: string }).function_name ??
+        (evt as { tool_name?: string }).tool_name ??
+        ((evt.tool as { name?: string } | undefined)?.name ?? undefined));
     const args =
       (evt as { arguments?: Record<string, unknown> }).arguments ??
-      ((evt.tool as { arguments?: Record<string, unknown> } | undefined)?.arguments ?? {});
+      ((evt as { input?: Record<string, unknown> }).input ??
+        ((evt.tool as { arguments?: Record<string, unknown> } | undefined)?.arguments ?? {}));
 
     if (name === 'create_order') {
       const items = Array.isArray(args.items) ? (args.items as Array<Record<string, unknown>>) : [];
