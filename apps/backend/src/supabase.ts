@@ -136,3 +136,26 @@ export async function createReservation(params: {
 
   if (error) throw error;
 }
+
+export async function buildMenuGuardPrompt(): Promise<string> {
+  const { data, error } = await supabase
+    .from('menu_items')
+    .select('name,price_cents,active')
+    .eq('active', true)
+    .order('name', { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    return 'Menu is unavailable right now. Ask the caller to wait for staff assistance.';
+  }
+
+  const menuLines = data.map((item) => `- ${item.name} ($${(item.price_cents / 100).toFixed(2)})`).join('\n');
+
+  return [
+    'You are a professional concierge for New Delhi Restaurant.',
+    'You can only take orders for the exact menu items listed below.',
+    'If caller asks for anything not listed, politely say it is unavailable and offer listed alternatives.',
+    'Before finalizing order, read back items, quantities, and pickup time.',
+    'Allowed menu items:',
+    menuLines
+  ].join('\n');
+}

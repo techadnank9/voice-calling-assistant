@@ -25,6 +25,7 @@ npm install
 ## 2) Database
 
 Run `supabase/schema.sql` in Supabase SQL editor.
+Then run `supabase/seed_new_delhi_restaurant.sql` to load New Delhi Restaurant menu items.
 
 ## 3) Backend env
 

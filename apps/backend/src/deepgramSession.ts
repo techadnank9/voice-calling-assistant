@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { env } from './config.js';
 import { logger } from './logger.js';
-import { createOrder, createReservation, insertEvent, insertMessage } from './supabase.js';
+import { buildMenuGuardPrompt, createOrder, createReservation, insertEvent, insertMessage } from './supabase.js';
 
 type TwilioMediaPayload = {
   event?: string;
@@ -61,6 +61,7 @@ export class DeepgramCallSession {
 
       if (kind === 'Welcome') {
         this.deepgramReady = true;
+        const menuPrompt = await buildMenuGuardPrompt().catch(() => 'Menu unavailable.');
         const settingsPayload = {
           type: 'Settings',
           audio: {
@@ -88,8 +89,7 @@ export class DeepgramCallSession {
                 type: 'open_ai',
                 model: 'gpt-4o-mini'
               },
-              prompt:
-                'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.'
+              prompt: menuPrompt
             },
             speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } },
             greeting:
