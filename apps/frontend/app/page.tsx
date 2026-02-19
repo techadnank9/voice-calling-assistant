@@ -22,6 +22,7 @@ export default function HomePage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [query, setQuery] = useState('');
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     const client = supabase;
@@ -81,6 +82,11 @@ export default function HomePage() {
         o.pickup_time.toLowerCase().includes(q)
     );
   }, [orders, query]);
+
+  const selectedOrder = useMemo(
+    () => orders.find((o) => o.id === selectedOrderId) ?? null,
+    [orders, selectedOrderId]
+  );
 
   return (
     <main className="min-h-screen px-3 py-4 sm:px-6">
@@ -144,7 +150,11 @@ export default function HomePage() {
                         filtered.map((order) => {
                           const count = itemsByOrder.get(order.id) ?? 0;
                           return (
-                            <tr key={order.id} className="border-t border-slate-200 bg-white">
+                            <tr
+                              key={order.id}
+                              onClick={() => setSelectedOrderId(order.id)}
+                              className={`cursor-pointer border-t border-slate-200 ${selectedOrderId === order.id ? 'bg-indigo-50' : 'bg-white hover:bg-slate-50'}`}
+                            >
                               <td className="px-3 py-3 font-semibold text-slate-800">{order.caller_phone ?? 'Restaurant Caller'}</td>
                               <td className="px-3 py-3 text-slate-700">{order.customer_name}</td>
                               <td className="px-3 py-3 text-slate-700">{order.pickup_time}</td>
@@ -163,6 +173,28 @@ export default function HomePage() {
             </div>
         </section>
       </div>
+      {selectedOrder ? (
+        <aside className="fixed inset-y-0 right-0 z-30 w-full max-w-md border-l border-slate-200 bg-white p-5 shadow-2xl">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xl font-semibold text-slate-900">{selectedOrder.customer_name}</p>
+              <p className="text-sm text-slate-500">{selectedOrder.caller_phone ?? 'Restaurant Caller'}</p>
+            </div>
+            <button
+              onClick={() => setSelectedOrderId(null)}
+              className="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-600"
+            >
+              Close
+            </button>
+          </div>
+          <div className="mt-4 space-y-2 text-sm text-slate-700">
+            <p><span className="font-semibold">Pickup:</span> {selectedOrder.pickup_time}</p>
+            <p><span className="font-semibold">Status:</span> {selectedOrder.status}</p>
+            <p><span className="font-semibold">Total:</span> ${(selectedOrder.total_cents / 100).toFixed(2)}</p>
+            <p><span className="font-semibold">Items:</span> {itemsByOrder.get(selectedOrder.id) ?? 0}</p>
+          </div>
+        </aside>
+      ) : null}
     </main>
   );
 }
