@@ -6,9 +6,10 @@
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(1200px 600px at 0% -10%, rgba(34, 211, 238, 0.16), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(249, 115, 22, 0.16), transparent 55%),
-    linear-gradient(180deg, #f6f9fc 0%, #edf2f8 55%, #e8eef6 100%);
   color: #0f172a;
+  background-color: #f3f4f6;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.08) 1px, transparent 0),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.96));
+  background-size: 16px 16px, 100% 100%;
 }
