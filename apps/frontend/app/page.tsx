@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
 type Order = {
@@ -107,9 +108,19 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
       <header className="rounded-3xl border border-slate-200/60 bg-white/80 p-6 shadow-sm backdrop-blur">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Restaurant Ops</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Orders Dashboard</h1>
-        <p className="mt-2 text-slate-600">All incoming orders with full details from the voice agent</p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Restaurant Ops</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Orders Dashboard</h1>
+            <p className="mt-2 text-slate-600">All incoming orders with full details from the voice agent</p>
+          </div>
+          <nav className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1">
+            <span className="rounded-lg bg-cyan-100 px-3 py-1.5 text-sm font-semibold text-cyan-900">Orders</span>
+            <Link href="/calls" className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
+              Calls
+            </Link>
+          </nav>
+        </div>
         {!hasSupabaseConfig ? (
           <p className="mt-4 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">
             Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable live dashboard data.
