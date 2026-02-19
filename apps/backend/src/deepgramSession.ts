@@ -75,28 +75,41 @@ export class DeepgramCallSession {
             }
           },
           agent: {
+            language: 'en',
             listen: { provider: { type: 'deepgram' } },
             think: {
-              provider: {
-                type: 'deepgram',
-                model: 'nova-3'
-              },
               prompt:
                 'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.'
             },
-            speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
+            speak: { provider: { type: 'deepgram', model: 'aura-2-asteria-en' } },
+            greeting:
+              'Hello, thanks for calling. I can help with pickup orders and table reservations. How can I help you today?'
           }
         };
         logger.info(
           {
             callSid: this.twilioCallSid,
-            thinkProvider: 'deepgram',
-            thinkModel: 'nova-3',
-            voiceModel: 'aura-2-thalia-en'
+            thinkProvider: 'managed-default',
+            voiceModel: 'aura-2-asteria-en'
           },
           'Deepgram welcome received, sending settings'
         );
         this.sendDeepgram(settingsPayload);
+      }
+
+      if (kind === 'SettingsApplied') {
+        logger.info({ callSid: this.twilioCallSid }, 'Deepgram settings applied');
+      }
+
+      if (kind === 'Error' || kind === 'Warning') {
+        logger.error(
+          {
+            callSid: this.twilioCallSid,
+            deepgramEvent: kind,
+            payload: evt
+          },
+          'Deepgram signaled an issue'
+        );
       }
 
       if (kind === 'UserStartedSpeaking') {
