@@ -76,7 +76,13 @@ export class DeepgramCallSession {
           },
           agent: {
             language: 'en',
-            listen: { provider: { type: 'deepgram' } },
+            listen: {
+              provider: {
+                type: 'deepgram',
+                model: 'nova-3',
+                smart_format: true
+              }
+            },
             think: {
               prompt:
                 'You are a professional concierge for a restaurant. You can take food pickup orders and table reservations. Always confirm details before finalizing. If a reservation cannot be confirmed, collect callback details and inform a human will follow up.'
@@ -90,6 +96,7 @@ export class DeepgramCallSession {
           {
             callSid: this.twilioCallSid,
             thinkProvider: 'managed-default',
+            listenModel: 'nova-3',
             voiceModel: 'aura-2-asteria-en'
           },
           'Deepgram welcome received, sending settings'
