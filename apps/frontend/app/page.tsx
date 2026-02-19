@@ -174,7 +174,7 @@ export default function HomePage() {
         <TopNav />
 
         <section className="mt-4 rounded-[28px] border border-slate-200 bg-white/95 p-3 shadow-[0_10px_40px_rgba(15,23,42,0.08)] lg:p-4">
-          <div className="grid gap-4 lg:grid-cols-[260px,1fr,340px]">
+          <div className="grid gap-4 lg:grid-cols-[260px_1fr_340px]">
             <Sidebar />
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -249,7 +249,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <aside className="rounded-2xl border border-slate-200 bg-white p-4">
+            <aside className="rounded-2xl border border-slate-200 bg-white p-4 lg:max-h-[calc(100vh-220px)] lg:overflow-auto">
               {selectedOrder ? (
                 <>
                   <div className="flex items-start justify-between gap-3">
