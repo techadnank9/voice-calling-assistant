@@ -58,7 +58,10 @@ export default function OverviewPage() {
 
   const stats = useMemo(() => {
     const revenueCents = orders.reduce((sum, o) => sum + (o.total_cents ?? 0), 0);
-    const uniqueCallers = new Set(calls.map((c) => c.from_number ?? c.id)).size;
+    const inboundCalls = calls.filter((c) => (c.from_number ?? '').trim().length > 0);
+    const uniqueCallers = new Set(
+      inboundCalls.map((c) => (c.from_number ?? '').trim())
+    ).size;
     const totalMinutes = calls.reduce((sum, c) => {
       if (!c.started_at || !c.ended_at) return sum;
       const start = new Date(c.started_at).getTime();
@@ -66,8 +69,8 @@ export default function OverviewPage() {
       if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return sum;
       return sum + Math.round((end - start) / 60000);
     }, 0);
-    const completed = calls.filter((c) => c.status === 'completed').length;
-    const inProgress = calls.filter((c) => c.status === 'in_progress').length;
+    const completed = inboundCalls.filter((c) => c.status === 'completed').length;
+    const inProgress = inboundCalls.filter((c) => c.status === 'in_progress').length;
     return {
       revenue: `$${(revenueCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       orders: orders.length,
@@ -199,6 +202,8 @@ function CallLineChart({ labels, values }: { labels: string[]; values: number[] 
   const height = 220;
   const padding = 26;
   const max = Math.max(1, ...values);
+  const yTicks = [0, Math.ceil(max * 0.25), Math.ceil(max * 0.5), Math.ceil(max * 0.75), max];
+  const uniqueYTicks = Array.from(new Set(yTicks)).sort((a, b) => a - b);
   const points = values.map((value, idx) => {
     const x = padding + (idx * (width - padding * 2)) / Math.max(1, values.length - 1);
     const y = height - padding - (value / max) * (height - padding * 2);
@@ -208,14 +213,28 @@ function CallLineChart({ labels, values }: { labels: string[]; values: number[] 
   return (
     <div className="mt-3 overflow-x-auto">
       <svg viewBox={`0 0 ${width} ${height + 24}`} className="h-[240px] w-full min-w-[520px]">
-        {[0.25, 0.5, 0.75, 1].map((t) => {
-          const y = height - padding - t * (height - padding * 2);
-          return <line key={t} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#e2e8f0" strokeWidth="1" />;
+        {uniqueYTicks.map((tick) => {
+          const y = height - padding - (tick / max) * (height - padding * 2);
+          return (
+            <g key={tick}>
+              <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+              <text x={padding - 8} y={y + 4} textAnchor="end" className="fill-slate-400 text-[11px]">
+                {tick}
+              </text>
+            </g>
+          );
         })}
         <polyline fill="none" stroke="#5b63f6" strokeWidth="3" points={points.join(' ')} />
         {points.map((point, idx) => {
           const [cx, cy] = point.split(',').map(Number);
-          return <circle key={`${labels[idx]}-${idx}`} cx={cx} cy={cy} r="4.5" fill="#5b63f6" />;
+          return (
+            <g key={`${labels[idx]}-${idx}`}>
+              <circle cx={cx} cy={cy} r="4.5" fill="#5b63f6" />
+              <text x={cx} y={cy - 10} textAnchor="middle" className="fill-slate-700 text-[11px] font-semibold">
+                {values[idx]}
+              </text>
+            </g>
+          );
         })}
         {labels.map((label, idx) => {
           const x = padding + (idx * (width - padding * 2)) / Math.max(1, labels.length - 1);

@@ -212,10 +212,11 @@ export async function buildMenuGuardPrompt(): Promise<string> {
   const menuLines = data.map((item) => `- ${item.name} ($${(item.price_cents / 100).toFixed(2)})`).join('\n');
 
   return [
-    'You are a professional concierge for New Delhi Restaurant.',
+    'Restaurant menu policy for New Delhi Restaurant:',
     'You can only take orders for the exact menu items listed below.',
-    'If caller asks for anything not listed, politely say it is unavailable and offer listed alternatives.',
-    'Before finalizing order, read back items, quantities, and pickup time.',
+    'Do not infer or invent items that are not listed.',
+    'If caller asks for anything not listed, politely say it is unavailable and suggest listed alternatives.',
+    'Before finalizing an order, read back item names, quantities, and pickup time.',
     'Allowed menu items:',
     menuLines
   ].join('\n');
@@ -272,6 +273,11 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
     .map((r) => r.text)
     .join('\n')
     .toLowerCase();
+  const assistantTranscript = (transcriptRows ?? [])
+    .filter((r) => r.role === 'assistant')
+    .map((r) => r.text)
+    .join('\n')
+    .toLowerCase();
 
   if (!transcript.trim()) return;
 
@@ -309,8 +315,15 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
 
   const { data: menuRows } = await supabase.from('menu_items').select('id,name,price_cents').eq('active', true);
 
+  const assistantOrderSignals = assistantTranscript
+    .split('\n')
+    .filter((line) => line.includes('your order') || line.includes('you ordered') || line.includes('order for'))
+    .join(' ');
+
+  const transcriptForItems = `${userTranscript}\n${assistantOrderSignals}`;
+
   const matchedItems =
-    menuRows?.filter((item) => userTranscript.includes(item.name.toLowerCase())).map((item) => ({
+    menuRows?.filter((item) => transcriptForItems.includes(item.name.toLowerCase())).map((item) => ({
       menuItemId: item.id,
       qty: 1,
       lineTotalCents: item.price_cents
@@ -337,6 +350,15 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
   ].join(' ');
 
   if (indicatesOrder && !existingOrder) {
+    logger.info(
+      {
+        twilioCallSid,
+        customerName,
+        matchedItems: matchedItems.map((i) => i.menuItemId),
+        totalCents
+      },
+      'Creating fallback order from transcript'
+    );
     await createOrder({
       callerPhone: callRow.from_number ?? undefined,
       customerName,
@@ -345,6 +367,11 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
       totalCents: totalCents || 0,
       items: matchedItems
     });
+  }
+  if (!indicatesOrder) {
+    logger.info({ twilioCallSid }, 'No fallback order intent detected from transcript');
+  } else if (existingOrder) {
+    logger.info({ twilioCallSid }, 'Fallback order already exists for call');
   }
 
   if (indicatesReservation && !existingReservation) {

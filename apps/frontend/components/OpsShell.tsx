@@ -7,14 +7,14 @@ type PageKey = 'overview' | 'orders' | 'calls' | 'reservations';
 
 export function OpsShell({ active, children }: { active: PageKey; children: ReactNode }) {
   return (
-    <main className="min-h-screen px-3 py-4 sm:px-6">
+    <main className="min-h-screen px-3 pb-24 pt-4 sm:px-6 sm:pb-6">
       <div className="mx-auto max-w-[1520px]">
         <div className="mb-2 rounded-xl border border-slate-200 bg-white px-3 py-2 lg:hidden">
           <div className="flex items-center justify-between">
             <p className="text-lg font-black tracking-tight text-slate-900">◉ Loman</p>
             <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">Active</span>
           </div>
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-2 flex flex-wrap gap-2 pb-1">
             <Link
               href="/overview"
               className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
@@ -93,6 +93,43 @@ export function OpsShell({ active, children }: { active: PageKey; children: Reac
           <div className="bg-white p-4 lg:p-5">{children}</div>
         </div>
       </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2 backdrop-blur lg:hidden">
+        <div className="mx-auto grid max-w-[1520px] grid-cols-4 gap-2">
+          <Link
+            href="/overview"
+            className={`rounded-lg px-2 py-2 text-center text-xs font-semibold ${
+              active === 'overview' ? 'bg-slate-100 text-slate-900' : 'text-slate-600'
+            }`}
+          >
+            Overview
+          </Link>
+          <Link
+            href="/"
+            className={`rounded-lg px-2 py-2 text-center text-xs font-semibold ${
+              active === 'orders' ? 'bg-slate-100 text-slate-900' : 'text-slate-600'
+            }`}
+          >
+            Orders
+          </Link>
+          <Link
+            href="/calls"
+            className={`rounded-lg px-2 py-2 text-center text-xs font-semibold ${
+              active === 'calls' ? 'bg-slate-100 text-slate-900' : 'text-slate-600'
+            }`}
+          >
+            Calls
+          </Link>
+          <Link
+            href="/reservations"
+            className={`rounded-lg px-2 py-2 text-center text-xs font-semibold ${
+              active === 'reservations' ? 'bg-slate-100 text-slate-900' : 'text-slate-600'
+            }`}
+          >
+            Reserve
+          </Link>
+        </div>
+      </nav>
     </main>
   );
 }
