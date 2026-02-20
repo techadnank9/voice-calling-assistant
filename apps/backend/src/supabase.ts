@@ -221,6 +221,33 @@ export async function buildMenuGuardPrompt(): Promise<string> {
   ].join('\n');
 }
 
+export async function reconcileStaleInProgressCalls(staleAfterMinutes = 3) {
+  const cutoff = new Date(Date.now() - staleAfterMinutes * 60_000).toISOString();
+  const { data: staleRows, error } = await supabase
+    .from('calls')
+    .select('id,twilio_call_sid,started_at')
+    .eq('status', 'in_progress')
+    .lt('created_at', cutoff);
+
+  if (error || !staleRows || staleRows.length === 0) return 0;
+
+  const { error: updateError } = await supabase
+    .from('calls')
+    .update({ status: 'completed', ended_at: new Date().toISOString() })
+    .in(
+      'id',
+      staleRows.map((r) => r.id)
+    );
+
+  if (updateError) throw updateError;
+
+  logger.warn(
+    { count: staleRows.length, staleAfterMinutes, callSids: staleRows.map((r) => r.twilio_call_sid) },
+    'Reconciled stale in_progress calls to completed'
+  );
+  return staleRows.length;
+}
+
 export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: string) {
   const { data: callRow } = await supabase
     .from('calls')

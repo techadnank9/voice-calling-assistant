@@ -6,7 +6,7 @@ import twilio from 'twilio';
 import { env } from './config.js';
 import { DeepgramCallSession } from './deepgramSession.js';
 import { logger } from './logger.js';
-import { insertEvent, persistFallbackOrderAndReservationFromCall, upsertCall } from './supabase.js';
+import { insertEvent, persistFallbackOrderAndReservationFromCall, reconcileStaleInProgressCalls, upsertCall } from './supabase.js';
 
 const app = express();
 app.use(pinoHttp.default({ logger }));
@@ -163,4 +163,12 @@ wss.on('connection', (ws) => {
 
 server.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, 'Backend started');
+  reconcileStaleInProgressCalls().catch((error) =>
+    logger.error({ error }, 'Failed to reconcile stale in_progress calls at startup')
+  );
+  setInterval(() => {
+    reconcileStaleInProgressCalls().catch((error) =>
+      logger.error({ error }, 'Failed to reconcile stale in_progress calls')
+    );
+  }, 60_000);
 });

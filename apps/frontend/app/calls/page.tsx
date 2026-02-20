@@ -23,9 +23,17 @@ type CallMessage = {
   created_at: string;
 };
 
+type CustomerRecord = {
+  caller_phone: string | null;
+  customer_name?: string | null;
+  guest_name?: string | null;
+  created_at: string;
+};
+
 export default function CallsPage() {
   const [calls, setCalls] = useState<Call[]>([]);
   const [messages, setMessages] = useState<CallMessage[]>([]);
+  const [customerRecords, setCustomerRecords] = useState<CustomerRecord[]>([]);
 
   useEffect(() => {
     const client = supabase;
@@ -55,6 +63,39 @@ export default function CallsPage() {
         .limit(400);
 
       setMessages((msgData as CallMessage[]) ?? []);
+
+      const phones = [...new Set(callRows.map((c) => c.from_number).filter(Boolean))] as string[];
+      if (phones.length > 0) {
+        const [{ data: orderData }, { data: reservationData }] = await Promise.all([
+          client
+            .from('orders')
+            .select('caller_phone,customer_name,created_at')
+            .in('caller_phone', phones)
+            .order('created_at', { ascending: false })
+            .limit(200),
+          client
+            .from('reservations')
+            .select('caller_phone,guest_name,created_at')
+            .in('caller_phone', phones)
+            .order('created_at', { ascending: false })
+            .limit(200)
+        ]);
+        const combined = [
+          ...(((orderData as Array<{ caller_phone: string | null; customer_name: string; created_at: string }> | null) ?? []).map((r) => ({
+            caller_phone: r.caller_phone,
+            customer_name: r.customer_name,
+            created_at: r.created_at
+          }))),
+          ...(((reservationData as Array<{ caller_phone: string | null; guest_name: string; created_at: string }> | null) ?? []).map((r) => ({
+            caller_phone: r.caller_phone,
+            guest_name: r.guest_name,
+            created_at: r.created_at
+          })))
+        ];
+        setCustomerRecords(combined);
+      } else {
+        setCustomerRecords([]);
+      }
     };
 
     load().catch(console.error);
@@ -62,6 +103,8 @@ export default function CallsPage() {
     const channel = client
       .channel('calls-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calls' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => load())
       .subscribe();
 
     return () => {
@@ -84,6 +127,50 @@ export default function CallsPage() {
     }
     return map;
   }, [messages]);
+
+  const customerNameByPhone = useMemo(() => {
+    const map = new Map<string, string>();
+    const sorted = [...customerRecords].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    for (const record of sorted) {
+      if (!record.caller_phone) continue;
+      if (map.has(record.caller_phone)) continue;
+      const name = (record.customer_name ?? record.guest_name ?? '').trim();
+      if (name) map.set(record.caller_phone, name);
+    }
+    return map;
+  }, [customerRecords]);
+
+  const customerNameByCallId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const call of calls) {
+      const phoneName = call.from_number ? customerNameByPhone.get(call.from_number) : undefined;
+      if (phoneName && !looksLikeFallbackName(phoneName)) {
+        map.set(call.id, phoneName);
+        continue;
+      }
+
+      const messagesForCall = messagesByCall.get(call.id) ?? [];
+      const joinedUserText = messagesForCall
+        .filter((m) => m.role.toLowerCase() === 'user')
+        .map((m) => m.text)
+        .join(' ')
+        .toLowerCase();
+
+      const nameMatch =
+        joinedUserText.match(/my name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        joinedUserText.match(/name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        joinedUserText.match(/this is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        joinedUserText.match(/i(?:\s|')?m\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        joinedUserText.match(/under\s+(?:the\s+)?name\s+([a-z]+(?:\s+[a-z]+){0,2})/);
+
+      if (nameMatch?.[1]) {
+        map.set(call.id, titleCase(nameMatch[1]));
+      }
+    }
+    return map;
+  }, [calls, customerNameByPhone, messagesByCall]);
 
   return (
     <OpsShell active="calls">
@@ -137,16 +224,19 @@ export default function CallsPage() {
                   <StatusChip status={call.status} />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">SID: {call.twilio_call_sid}</p>
-                <p className="mt-1 text-xs text-slate-500">Started: {format(call.started_at)} | Ended: {format(call.ended_at)}</p>
+                <p className="mt-1 text-xs text-slate-500">Started: {formatPretty(call.started_at)} | Ended: {formatPretty(call.ended_at)}</p>
                 <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Conversation Preview</p>
                   {((messagesByCall.get(call.id) ?? []).length === 0) ? (
                     <p className="mt-1 text-xs text-slate-400">No transcript captured for this call.</p>
                   ) : (
-                    <ul className="mt-1 space-y-1 text-xs text-slate-700">
-                      {(messagesByCall.get(call.id) ?? []).slice(-4).map((message) => (
+                    <ul className="mt-1 max-h-44 space-y-1 overflow-y-auto pr-1 text-xs text-slate-700">
+                      {dedupePreview(messagesByCall.get(call.id) ?? []).map((message) => (
                         <li key={message.id}>
-                          <span className="font-semibold">{message.role}:</span> {message.text}
+                          <span className="font-semibold">
+                            {formatRole(message.role, call.id, customerNameByCallId)}:
+                          </span>{' '}
+                          {message.text}
                         </li>
                       ))}
                     </ul>
@@ -189,6 +279,18 @@ function format(v: string | null) {
   return d.toLocaleString();
 }
 
+function formatPretty(v: string | null) {
+  if (!v) return 'N/A';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  const day = d.getDate();
+  const suffix = day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th';
+  const month = d.toLocaleString(undefined, { month: 'short' });
+  const year = d.getFullYear();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `${day}${suffix} ${month} ${year}, ${time}`;
+}
+
 function displayFrom(from: string | null, sid: string) {
   if (from && from.trim().length > 0) return from;
   return `Caller ${sid.slice(-6)}`;
@@ -197,4 +299,34 @@ function displayFrom(from: string | null, sid: string) {
 function displayTo(to: string | null) {
   if (to && to.trim().length > 0) return to;
   return 'Restaurant Line';
+}
+
+function formatRole(role: string, callId: string, customerNameByCallId: Map<string, string>) {
+  const r = role.toLowerCase();
+  if (r === 'user') {
+    const n = customerNameByCallId.get(callId);
+    return n ? `customer (${n})` : 'customer';
+  }
+  if (r === 'assistant') return 'agent';
+  return role;
+}
+
+function looksLikeFallbackName(name: string) {
+  const lowered = name.toLowerCase();
+  return lowered.startsWith('caller ') || lowered === 'caller' || lowered.includes('phone customer');
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function dedupePreview(messages: CallMessage[]) {
+  const seen = new Set<string>();
+  return messages.filter((m) => {
+    const text = m.text.replace(/\s+/g, ' ').trim().toLowerCase();
+    const key = `${m.role}:${text}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

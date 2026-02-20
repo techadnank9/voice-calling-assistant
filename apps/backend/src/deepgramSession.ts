@@ -70,6 +70,8 @@ export class DeepgramCallSession {
           'Do not sound robotic and do not repeat fixed phrases.',
           'Ask one clear follow-up question at a time.',
           'Confirm key details naturally before finalizing.',
+          'Start with greeting only. Then pause and listen to the customer first.',
+          'After the customer explains what they want, ask for their name and confirm it.',
           'Before creating any order or reservation, explicitly ask the customer name and confirm it.',
           'For reservations, you must collect and confirm: guest full name, reservation date, reservation time, party size, and occasion.'
         ].join(' ');
@@ -103,8 +105,7 @@ export class DeepgramCallSession {
               prompt: `${stylePrompt}\n\n${menuPrompt}`
             },
             speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } },
-            greeting:
-              'Hello, thanks for calling. I can help with pickup orders and table reservations. How can I help you today?'
+            greeting: 'Hello, thanks for calling New Delhi Restaurant.'
           }
         };
         logger.info(

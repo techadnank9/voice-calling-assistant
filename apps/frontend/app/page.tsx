@@ -23,9 +23,19 @@ type OrderItem = {
   menu_items?: { name?: string | null } | null;
 };
 
+type Call = {
+  id: string;
+  twilio_call_sid?: string | null;
+  from_number: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+};
+
 export default function HomePage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [calls, setCalls] = useState<Call[]>([]);
   const [query, setQuery] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [liveConversationSummary, setLiveConversationSummary] = useState<string>('');
@@ -55,6 +65,19 @@ export default function HomePage() {
         .in('order_id', rows.map((r) => r.id));
 
       setOrderItems((itemsData as OrderItem[]) ?? []);
+
+      const phones = [...new Set(rows.map((r) => r.caller_phone).filter(Boolean))] as string[];
+      if (phones.length > 0) {
+        const { data: callData } = await client
+          .from('calls')
+          .select('id,twilio_call_sid,from_number,started_at,ended_at,created_at')
+          .in('from_number', phones)
+          .order('created_at', { ascending: false })
+          .limit(300);
+        setCalls((callData as Call[]) ?? []);
+      } else {
+        setCalls([]);
+      }
     };
 
     load().catch(console.error);
@@ -63,6 +86,7 @@ export default function HomePage() {
       .channel('orders-table-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'calls' }, () => load())
       .subscribe();
 
     return () => {
@@ -80,25 +104,63 @@ export default function HomePage() {
     return map;
   }, [orderItems]);
 
+  const visibleOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const itemCount = (itemsByOrder.get(o.id) ?? []).length;
+      return itemCount > 0 || o.total_cents > 0;
+    });
+  }, [orders, itemsByOrder]);
+
   const filtered = useMemo(() => {
-    if (!query.trim()) return orders;
+    if (!query.trim()) return visibleOrders;
     const q = query.toLowerCase();
-    return orders.filter(
+    return visibleOrders.filter(
       (o) =>
         (o.caller_phone ?? '').toLowerCase().includes(q) ||
         o.customer_name.toLowerCase().includes(q) ||
         o.pickup_time.toLowerCase().includes(q)
     );
-  }, [orders, query]);
+  }, [visibleOrders, query]);
 
   const selectedOrder = useMemo(
-    () => orders.find((o) => o.id === selectedOrderId) ?? null,
-    [orders, selectedOrderId]
+    () => visibleOrders.find((o) => o.id === selectedOrderId) ?? null,
+    [visibleOrders, selectedOrderId]
   );
   const selectedOrderSummary = useMemo(() => {
     if (!selectedOrder?.notes) return '';
     return selectedOrder.notes.replace(/\[auto:[^\]]+\]\s*auto-captured from transcript/gi, '').trim();
   }, [selectedOrder]);
+
+  const latestCallByPhone = useMemo(() => {
+    const map = new Map<string, Call>();
+    for (const call of calls) {
+      if (!call.from_number) continue;
+      if (!map.has(call.from_number)) map.set(call.from_number, call);
+    }
+    return map;
+  }, [calls]);
+  const callsBySid = useMemo(() => {
+    const map = new Map<string, Call>();
+    for (const call of calls) {
+      if (!call.twilio_call_sid) continue;
+      map.set(call.twilio_call_sid, call);
+    }
+    return map;
+  }, [calls]);
+  const callsByPhone = useMemo(() => {
+    const map = new Map<string, Call[]>();
+    for (const call of calls) {
+      if (!call.from_number) continue;
+      const bucket = map.get(call.from_number) ?? [];
+      bucket.push(call);
+      map.set(call.from_number, bucket);
+    }
+    for (const [phone, bucket] of map.entries()) {
+      bucket.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      map.set(phone, bucket);
+    }
+    return map;
+  }, [calls]);
   const selectedOrderConversationSummary = useMemo(() => {
     if (!selectedOrder) return '';
     if (liveConversationSummary.trim()) return liveConversationSummary;
@@ -121,23 +183,21 @@ export default function HomePage() {
     ].join(' ');
   }, [selectedOrder, selectedOrderSummary, liveConversationSummary, itemsByOrder]);
 
+  const selectedOrderCall = useMemo(() => {
+    if (!selectedOrder) return undefined;
+    return resolveCallForOrder(selectedOrder, callsBySid, callsByPhone, latestCallByPhone);
+  }, [selectedOrder, callsBySid, callsByPhone, latestCallByPhone]);
+
   useEffect(() => {
     const client = supabase;
     const order = selectedOrder;
-    if (!client || !order || !order.caller_phone) {
+    if (!client || !order) {
       setLiveConversationSummary('');
       return;
     }
 
     const buildSummary = async () => {
-      const { data: callRows } = await client
-        .from('calls')
-        .select('id,created_at,from_number')
-        .eq('from_number', order.caller_phone)
-        .order('created_at', { ascending: false })
-        .limit(3);
-
-      const callId = (callRows as Array<{ id: string }> | null)?.[0]?.id;
+      const callId = selectedOrderCall?.id;
       if (!callId) {
         setLiveConversationSummary('');
         return;
@@ -166,9 +226,12 @@ export default function HomePage() {
         .map((r) => r.text.trim())
         .filter(Boolean);
 
+      const compactUser = dedupeLines(userLines);
+      const compactAssistant = dedupeLines(assistantLines);
+
       const summary = [
-        userLines.length > 0 ? `Customer requested: ${userLines.join(' ')}` : null,
-        assistantLines.length > 0 ? `Agent confirmed: ${assistantLines.join(' ')}` : null
+        compactUser.length > 0 ? `Customer requested: ${compactUser.join(' ')}` : null,
+        compactAssistant.length > 0 ? `Agent confirmed: ${compactAssistant.join(' ')}` : null
       ]
         .filter(Boolean)
         .join(' ');
@@ -177,7 +240,7 @@ export default function HomePage() {
     };
 
     buildSummary().catch(() => setLiveConversationSummary(''));
-  }, [selectedOrder]);
+  }, [selectedOrder, selectedOrderCall]);
 
   return (
     <OpsShell active="orders">
@@ -223,6 +286,9 @@ export default function HomePage() {
                       ) : (
                         filtered.map((order) => {
                           const count = (itemsByOrder.get(order.id) ?? []).length;
+                          const call = resolveCallForOrder(order, callsBySid, callsByPhone, latestCallByPhone);
+                          const duration = formatDuration(call?.started_at ?? null, call?.ended_at ?? null);
+                          const rowTime = formatRowTime(call?.created_at ?? order.created_at);
                           return (
                             <tr
                               key={order.id}
@@ -231,11 +297,11 @@ export default function HomePage() {
                             >
                               <td className="px-3 py-3 font-semibold text-slate-800">{order.caller_phone ?? 'Restaurant Caller'}</td>
                               <td className="px-3 py-3 text-slate-700">{order.customer_name}</td>
-                              <td className="px-3 py-3 text-slate-700">{order.pickup_time}</td>
+                              <td className="px-3 py-3 text-slate-700">{rowTime}</td>
                               <td className="px-3 py-3 text-indigo-600">{count} item{count === 1 ? '' : 's'}</td>
                               <td className="px-3 py-3 font-bold text-slate-900">${(order.total_cents / 100).toFixed(2)}</td>
                               <td className="px-3 py-3">Pickup</td>
-                              <td className="px-3 py-3 text-slate-500">0m 00s</td>
+                              <td className="px-3 py-3 text-slate-500">{duration}</td>
                             </tr>
                           );
                         })
@@ -249,6 +315,9 @@ export default function HomePage() {
                       <div className="space-y-2 p-2">
                         {filtered.map((order) => {
                           const count = (itemsByOrder.get(order.id) ?? []).length;
+                          const call = resolveCallForOrder(order, callsBySid, callsByPhone, latestCallByPhone);
+                          const duration = formatDuration(call?.started_at ?? null, call?.ended_at ?? null);
+                          const rowTime = formatRowTime(call?.created_at ?? order.created_at);
                           return (
                             <button
                               key={order.id}
@@ -265,11 +334,12 @@ export default function HomePage() {
                               </div>
                               <p className="mt-1 text-sm text-slate-600">{order.caller_phone ?? 'Restaurant Caller'}</p>
                               <div className="mt-2 flex items-center justify-between text-sm">
-                                <span className="text-slate-600">{order.pickup_time}</span>
+                                <span className="text-slate-600">{rowTime}</span>
                                 <span className="font-medium text-indigo-600">
                                   {count} item{count === 1 ? '' : 's'}
                                 </span>
                               </div>
+                              <p className="mt-1 text-xs text-slate-500">Duration: {duration}</p>
                             </button>
                           );
                         })}
@@ -334,4 +404,89 @@ export default function HomePage() {
       )})() : null}
     </OpsShell>
   );
+}
+
+function formatDuration(startedAt: string | null, endedAt: string | null) {
+  if (!startedAt || !endedAt) return 'N/A';
+  const start = new Date(startedAt).getTime();
+  const end = new Date(endedAt).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return 'N/A';
+  const sec = Math.floor((end - start) / 1000);
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return `${min}m ${rem.toString().padStart(2, '0')}s`;
+}
+
+function formatRowTime(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function extractCallSid(notes?: string | null) {
+  if (!notes) return null;
+  const match = notes.match(/\[auto:(CA[a-z0-9]+)\]/i);
+  return match?.[1] ?? null;
+}
+
+function resolveCallForOrder(
+  order: Order,
+  callsBySid: Map<string, Call>,
+  callsByPhone: Map<string, Call[]>,
+  latestCallByPhone: Map<string, Call>
+) {
+  const sid = extractCallSid(order.notes);
+  if (sid && callsBySid.has(sid)) return callsBySid.get(sid);
+
+  if (order.caller_phone) {
+    const bucket = callsByPhone.get(order.caller_phone) ?? [];
+    if (bucket.length > 0) {
+      const orderTs = new Date(order.created_at).getTime();
+      if (!Number.isNaN(orderTs)) {
+        let best: Call | undefined;
+        let bestDiff = Number.POSITIVE_INFINITY;
+        for (const call of bucket) {
+          const callTs = new Date(call.created_at).getTime();
+          if (Number.isNaN(callTs)) continue;
+          const diff = Math.abs(orderTs - callTs);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            best = call;
+          }
+        }
+        if (best) return best;
+      }
+    }
+    return latestCallByPhone.get(order.caller_phone);
+  }
+
+  return undefined;
+}
+
+function dedupeLines(lines: string[]) {
+  const seen = new Set<string>();
+  const normalized = lines
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter((line) => {
+      const key = line.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  return normalized.map((line) => {
+    const sentences = line
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const sentenceSeen = new Set<string>();
+    const dedupedSentences = sentences.filter((s) => {
+      const key = s.toLowerCase();
+      if (sentenceSeen.has(key)) return false;
+      sentenceSeen.add(key);
+      return true;
+    });
+    return dedupedSentences.join(' ');
+  });
 }
