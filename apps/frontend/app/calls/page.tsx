@@ -305,9 +305,9 @@ function formatRole(role: string, callId: string, customerNameByCallId: Map<stri
   const r = role.toLowerCase();
   if (r === 'user') {
     const n = customerNameByCallId.get(callId);
-    return n ? `customer (${n})` : 'customer';
+    return n ? n : 'Customer';
   }
-  if (r === 'assistant') return 'agent';
+  if (r === 'assistant') return 'Agent';
   return role;
 }
 

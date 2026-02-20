@@ -76,6 +76,7 @@ export class DeepgramCallSession {
           'Order rules:',
           '- Only accept items from the provided menu list.',
           '- If an item is not on menu, decline politely and suggest nearby menu options.',
+          '- Default pickup time is 20 minutes from now unless customer asks for a different time.',
           '- Before finalizing, confirm items, quantity, pickup time, and customer name.',
           'Reservation rules:',
           '- Must collect and confirm: guest full name, reservation date, reservation time, party size, and occasion.',
@@ -338,7 +339,7 @@ export class DeepgramCallSession {
       await createOrder({
         callerPhone: typeof args.caller_phone === 'string' ? args.caller_phone : undefined,
         customerName: String(args.customer_name ?? 'Unknown'),
-        pickupTime: String(args.pickup_time ?? ''),
+        pickupTime: String(args.pickup_time ?? '20 minutes'),
         notes: typeof args.notes === 'string' ? args.notes : undefined,
         totalCents: typeof args.total_cents === 'number' ? args.total_cents : undefined,
         items: items.map((item) => ({

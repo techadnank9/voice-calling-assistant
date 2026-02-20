@@ -297,7 +297,7 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
     : fallbackCustomerName;
 
   const timeMatch = transcript.match(/(\\d{1,2}(:\\d{2})?\\s?(am|pm))/i);
-  const timeValue = timeMatch?.[1] ?? 'ASAP';
+  const timeValue = timeMatch?.[1] ?? '20 minutes';
 
   const { data: existingOrder } = await supabase
     .from('orders')
