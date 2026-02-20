@@ -32,10 +32,19 @@ type Call = {
   created_at: string;
 };
 
+type CallMessage = {
+  id: string;
+  call_id: string;
+  role: string;
+  text: string;
+  created_at: string;
+};
+
 export default function HomePage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [calls, setCalls] = useState<Call[]>([]);
+  const [callMessages, setCallMessages] = useState<CallMessage[]>([]);
   const [query, setQuery] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [liveConversationSummary, setLiveConversationSummary] = useState<string>('');
@@ -74,9 +83,24 @@ export default function HomePage() {
           .in('from_number', phones)
           .order('created_at', { ascending: false })
           .limit(300);
-        setCalls((callData as Call[]) ?? []);
+        const callRows = (callData as Call[]) ?? [];
+        setCalls(callRows);
+
+        if (callRows.length > 0) {
+          const callIds = callRows.map((c) => c.id);
+          const { data: msgData } = await client
+            .from('call_messages')
+            .select('id,call_id,role,text,created_at')
+            .in('call_id', callIds)
+            .order('created_at', { ascending: true })
+            .limit(2000);
+          setCallMessages((msgData as CallMessage[]) ?? []);
+        } else {
+          setCallMessages([]);
+        }
       } else {
         setCalls([]);
+        setCallMessages([]);
       }
     };
 
@@ -139,6 +163,15 @@ export default function HomePage() {
     }
     return map;
   }, [calls]);
+  const messagesByCall = useMemo(() => {
+    const map = new Map<string, CallMessage[]>();
+    for (const message of callMessages) {
+      const bucket = map.get(message.call_id) ?? [];
+      bucket.push(message);
+      map.set(message.call_id, bucket);
+    }
+    return map;
+  }, [callMessages]);
   const callsBySid = useMemo(() => {
     const map = new Map<string, Call>();
     for (const call of calls) {
@@ -161,32 +194,44 @@ export default function HomePage() {
     }
     return map;
   }, [calls]);
-  const selectedOrderConversationSummary = useMemo(() => {
-    if (!selectedOrder) return '';
-    if (liveConversationSummary.trim()) return liveConversationSummary;
-    if (selectedOrderSummary) return selectedOrderSummary;
-
-    const selectedItems = itemsByOrder.get(selectedOrder.id) ?? [];
-    const itemText =
-      selectedItems.length > 0
-        ? selectedItems
-            .map((item) => `${item.qty ?? 1}x ${item.menu_items?.name ?? 'item'}`)
-            .slice(0, 4)
-            .join(', ')
-        : 'their requested items';
-
-    return [
-      `${selectedOrder.customer_name} called to place a pickup order.`,
-      `They ordered ${itemText}.`,
-      `Pickup was confirmed for ${selectedOrder.pickup_time}.`,
-      `Total confirmed: $${(selectedOrder.total_cents / 100).toFixed(2)}.`
-    ].join(' ');
-  }, [selectedOrder, selectedOrderSummary, liveConversationSummary, itemsByOrder]);
-
+  const nameByCallId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const call of calls) {
+      const rows = messagesByCall.get(call.id) ?? [];
+      const userText = rows
+        .filter((r) => r.role.toLowerCase() === 'user')
+        .map((r) => r.text)
+        .join(' ')
+        .toLowerCase();
+      const match =
+        userText.match(/my name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/this is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/it(?:\s|')?s\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/([a-z]+(?:\s+[a-z]+){0,2})\s+speaking/) ??
+        userText.match(/i(?:\s|')?m\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/under\s+(?:the\s+)?name\s+([a-z]+(?:\s+[a-z]+){0,2})/);
+      if (match?.[1]) map.set(call.id, titleCase(match[1]));
+    }
+    return map;
+  }, [calls, messagesByCall]);
   const selectedOrderCall = useMemo(() => {
     if (!selectedOrder) return undefined;
     return resolveCallForOrder(selectedOrder, callsBySid, callsByPhone, latestCallByPhone);
   }, [selectedOrder, callsBySid, callsByPhone, latestCallByPhone]);
+  const selectedResolvedName = useMemo(() => {
+    if (!selectedOrder) return '';
+    return resolveDisplayName(selectedOrder.customer_name, selectedOrderCall?.id, nameByCallId);
+  }, [selectedOrder, selectedOrderCall, nameByCallId]);
+  const selectedOrderConversationSummary = useMemo(() => {
+    if (!selectedOrder) return '';
+    const selectedItems = itemsByOrder.get(selectedOrder.id) ?? [];
+    const fallbackSummary = buildOutcomeSummary(selectedOrder, selectedItems, selectedResolvedName);
+
+    if (selectedOrderSummary) return selectedOrderSummary;
+    if (isUsefulOutcomeSummary(liveConversationSummary)) return liveConversationSummary;
+    return fallbackSummary;
+  }, [selectedOrder, selectedOrderSummary, liveConversationSummary, itemsByOrder, selectedResolvedName]);
 
   useEffect(() => {
     const client = supabase;
@@ -216,25 +261,26 @@ export default function HomePage() {
         return;
       }
 
-      const lastTurns = rows.slice(-8);
-      const userLines = lastTurns
-        .filter((r) => r.role === 'user')
-        .map((r) => r.text.trim())
-        .filter(Boolean);
-      const assistantLines = lastTurns
-        .filter((r) => r.role === 'assistant')
-        .map((r) => r.text.trim())
-        .filter(Boolean);
+      const userLines = dedupeLines(
+        rows
+          .filter((r) => r.role === 'user')
+          .map((r) => r.text.trim())
+          .filter((line) => line.length > 0 && !isBoilerplateLine(line))
+      );
+      const assistantLines = dedupeLines(
+        rows
+          .filter((r) => r.role === 'assistant')
+          .map((r) => r.text.trim())
+          .filter((line) => line.length > 0 && !isBoilerplateLine(line))
+      );
 
-      const compactUser = dedupeLines(userLines);
-      const compactAssistant = dedupeLines(assistantLines);
+      const requested = pickBestUserRequest(userLines);
+      const confirmed = pickBestAssistantConfirmation(assistantLines);
 
       const summary = [
-        compactUser.length > 0 ? `Customer requested: ${compactUser.join(' ')}` : null,
-        compactAssistant.length > 0 ? `Agent confirmed: ${compactAssistant.join(' ')}` : null
-      ]
-        .filter(Boolean)
-        .join(' ');
+        requested ? `Customer requested: ${requested}` : null,
+        confirmed ? `Agent confirmed: ${confirmed}` : null
+      ].filter(Boolean).join(' ');
 
       setLiveConversationSummary(summary);
     };
@@ -287,6 +333,7 @@ export default function HomePage() {
                         filtered.map((order) => {
                           const count = (itemsByOrder.get(order.id) ?? []).length;
                           const call = resolveCallForOrder(order, callsBySid, callsByPhone, latestCallByPhone);
+                          const displayName = resolveDisplayName(order.customer_name, call?.id, nameByCallId);
                           const duration = formatDuration(call?.started_at ?? null, call?.ended_at ?? null);
                           const rowTime = formatRowTime(call?.created_at ?? order.created_at);
                           return (
@@ -296,7 +343,7 @@ export default function HomePage() {
                               className={`cursor-pointer border-t border-slate-200 ${selectedOrderId === order.id ? 'bg-indigo-50' : 'bg-white hover:bg-slate-50'}`}
                             >
                               <td className="px-3 py-3 font-semibold text-slate-800">{order.caller_phone ?? 'Restaurant Caller'}</td>
-                              <td className="px-3 py-3 text-slate-700">{order.customer_name}</td>
+                              <td className="px-3 py-3 text-slate-700">{displayName}</td>
                               <td className="px-3 py-3 text-slate-700">{rowTime}</td>
                               <td className="px-3 py-3 text-indigo-600">{count} item{count === 1 ? '' : 's'}</td>
                               <td className="px-3 py-3 font-bold text-slate-900">${(order.total_cents / 100).toFixed(2)}</td>
@@ -316,6 +363,7 @@ export default function HomePage() {
                         {filtered.map((order) => {
                           const count = (itemsByOrder.get(order.id) ?? []).length;
                           const call = resolveCallForOrder(order, callsBySid, callsByPhone, latestCallByPhone);
+                          const displayName = resolveDisplayName(order.customer_name, call?.id, nameByCallId);
                           const duration = formatDuration(call?.started_at ?? null, call?.ended_at ?? null);
                           const rowTime = formatRowTime(call?.created_at ?? order.created_at);
                           return (
@@ -329,7 +377,7 @@ export default function HomePage() {
                               }`}
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <p className="text-base font-semibold text-slate-900">{order.customer_name}</p>
+                                <p className="text-base font-semibold text-slate-900">{displayName}</p>
                                 <p className="text-base font-bold text-slate-900">${(order.total_cents / 100).toFixed(2)}</p>
                               </div>
                               <p className="mt-1 text-sm text-slate-600">{order.caller_phone ?? 'Restaurant Caller'}</p>
@@ -356,10 +404,10 @@ export default function HomePage() {
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-lg font-bold text-emerald-700">
-                {selectedOrder.customer_name.charAt(0).toUpperCase()}
+                {selectedResolvedName.charAt(0).toUpperCase()}
               </div>
               <div>
-                <p className="text-xl font-semibold text-slate-900">{selectedOrder.customer_name}</p>
+                <p className="text-xl font-semibold text-slate-900">{selectedResolvedName}</p>
                 <p className="text-sm text-slate-500">{selectedOrder.caller_phone ?? 'Restaurant Caller'}</p>
               </div>
             </div>
@@ -489,4 +537,78 @@ function dedupeLines(lines: string[]) {
     });
     return dedupedSentences.join(' ');
   });
+}
+
+function looksLikeFallbackName(name: string) {
+  const lowered = name.toLowerCase().trim();
+  return lowered.startsWith('caller ') || lowered === 'caller' || lowered.includes('phone customer');
+}
+
+function isLowSignalConversation(text: string) {
+  const normalized = text.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!normalized) return true;
+
+  const hasActionSignal = /(order|reservation|table|pickup|item|party|name is|my name is|ready in|minutes|total|\$|confirm|book)/i.test(
+    normalized
+  );
+  if (hasActionSignal) return false;
+
+  const noSignal = /(thank you|thanks|great day|you'?re welcome|bye|see you|okay|ok)/i.test(normalized);
+  return noSignal;
+}
+
+function isBoilerplateLine(line: string) {
+  const normalized = line.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!normalized) return true;
+  if (normalized.length < 3) return true;
+  return /^(thank you|thanks|you'?re welcome|have a great day|take care|bye|goodbye|okay|ok|perfect!?|great!?)\.?$/.test(
+    normalized
+  );
+}
+
+function pickBestUserRequest(lines: string[]) {
+  if (lines.length === 0) return '';
+  const strong = lines.find((line) =>
+    /(order|reservation|table|book|pickup|deliver|party|for\s+\d+\s*(people|persons)|item|want|would like|i need)/i.test(
+      line
+    )
+  );
+  return strong ?? lines[0];
+}
+
+function pickBestAssistantConfirmation(lines: string[]) {
+  if (lines.length === 0) return '';
+  const strong = lines.find((line) =>
+    /(confirmed|ready|pickup|reservation|booked|table|total|will be|in\s+\d+\s*minutes|anything else)/i.test(line)
+  );
+  return strong ?? lines[lines.length - 1];
+}
+
+function resolveDisplayName(customerName: string, callId: string | undefined, nameByCallId: Map<string, string>) {
+  if (!looksLikeFallbackName(customerName)) return customerName;
+  if (!callId) return customerName;
+  return nameByCallId.get(callId) ?? customerName;
+}
+
+function buildOutcomeSummary(order: Order, items: OrderItem[], resolvedName: string) {
+  const safeName = looksLikeFallbackName(resolvedName) ? 'Customer' : resolvedName;
+  const itemText =
+    items.length > 0
+      ? items.map((item) => `${item.qty ?? 1}x ${item.menu_items?.name ?? 'item'}`).join(', ')
+      : 'menu items';
+  const pickup = order.pickup_time?.trim() || 'ASAP';
+  const total = `$${(order.total_cents / 100).toFixed(2)}`;
+
+  return `${safeName} placed a pickup order for ${itemText}. Pickup time: ${pickup}. Total: ${total}.`;
+}
+
+function isUsefulOutcomeSummary(value: string) {
+  const text = value.trim();
+  if (!text) return false;
+  if (/^customer requested:/i.test(text) || /^agent confirmed:/i.test(text)) return false;
+  return /(pickup|reservation|order|total|\$|confirmed|ready)/i.test(text);
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (m) => m.toUpperCase());
 }

@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { OpsShell } from '../../components/OpsShell';
 import { hasSupabaseConfig, supabase } from '../../lib/supabase';
@@ -16,15 +15,33 @@ type Reservation = {
   created_at: string;
 };
 
+type Call = {
+  id: string;
+  twilio_call_sid?: string | null;
+  from_number: string | null;
+  created_at: string;
+};
+
+type CallMessage = {
+  id: string;
+  call_id: string;
+  role: string;
+  text: string;
+  created_at: string;
+};
+
 type ReservationView = Reservation & {
   dateLabel: string;
   timeLabel: string;
   occasion: string;
   qualityOk: boolean;
+  displayName: string;
 };
 
 export default function ReservationsPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [calls, setCalls] = useState<Call[]>([]);
+  const [callMessages, setCallMessages] = useState<CallMessage[]>([]);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -38,7 +55,36 @@ export default function ReservationsPage() {
         .order('created_at', { ascending: false })
         .limit(100);
 
-      setReservations((data as Reservation[]) ?? []);
+      const rows = (data as Reservation[]) ?? [];
+      setReservations(rows);
+
+      const phones = [...new Set(rows.map((r) => r.caller_phone).filter(Boolean))] as string[];
+      if (phones.length > 0) {
+        const { data: callData } = await client
+          .from('calls')
+          .select('id,twilio_call_sid,from_number,created_at')
+          .in('from_number', phones)
+          .order('created_at', { ascending: false })
+          .limit(300);
+        const callRows = (callData as Call[]) ?? [];
+        setCalls(callRows);
+
+        if (callRows.length > 0) {
+          const callIds = callRows.map((c) => c.id);
+          const { data: msgData } = await client
+            .from('call_messages')
+            .select('id,call_id,role,text,created_at')
+            .in('call_id', callIds)
+            .order('created_at', { ascending: true })
+            .limit(2000);
+          setCallMessages((msgData as CallMessage[]) ?? []);
+        } else {
+          setCallMessages([]);
+        }
+      } else {
+        setCalls([]);
+        setCallMessages([]);
+      }
     };
 
     load().catch(console.error);
@@ -46,6 +92,7 @@ export default function ReservationsPage() {
     const channel = client
       .channel('reservations-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'calls' }, () => load())
       .subscribe();
 
     return () => {
@@ -53,20 +100,66 @@ export default function ReservationsPage() {
     };
   }, []);
 
+  const messagesByCall = useMemo(() => {
+    const map = new Map<string, CallMessage[]>();
+    for (const message of callMessages) {
+      const bucket = map.get(message.call_id) ?? [];
+      bucket.push(message);
+      map.set(message.call_id, bucket);
+    }
+    return map;
+  }, [callMessages]);
+
+  const callsByPhone = useMemo(() => {
+    const map = new Map<string, Call[]>();
+    for (const call of calls) {
+      if (!call.from_number) continue;
+      const bucket = map.get(call.from_number) ?? [];
+      bucket.push(call);
+      map.set(call.from_number, bucket);
+    }
+    for (const [phone, bucket] of map.entries()) {
+      bucket.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      map.set(phone, bucket);
+    }
+    return map;
+  }, [calls]);
+
+  const nameByCallId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const call of calls) {
+      const rows = messagesByCall.get(call.id) ?? [];
+      const userText = rows
+        .filter((r) => r.role.toLowerCase() === 'user')
+        .map((r) => r.text)
+        .join(' ')
+        .toLowerCase();
+      const match =
+        userText.match(/my name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/this is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/i(?:\s|')?m\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/under\s+(?:the\s+)?name\s+([a-z]+(?:\s+[a-z]+){0,2})/);
+      if (match?.[1]) map.set(call.id, titleCase(match[1]));
+    }
+    return map;
+  }, [calls, messagesByCall]);
+
   const reservationViews = useMemo<ReservationView[]>(
     () =>
       reservations.map((r) => {
         const { dateLabel, timeLabel } = parseDateTime(r.reservation_time);
         const occasion = extractOccasion(r.notes);
+        const call = resolveCallForReservation(r, callsByPhone);
+        const displayName = resolveDisplayName(r.guest_name, call?.id, nameByCallId);
         const qualityOk =
-          !r.guest_name.toLowerCase().startsWith('caller') &&
-          !r.guest_name.toLowerCase().includes('phone customer') &&
+          !looksLikeFallbackName(displayName) &&
           dateLabel !== 'Not captured' &&
           timeLabel !== 'Not captured' &&
           occasion !== 'Not captured';
-        return { ...r, dateLabel, timeLabel, occasion, qualityOk };
+        return { ...r, dateLabel, timeLabel, occasion, qualityOk, displayName };
       }),
-    [reservations]
+    [reservations, callsByPhone, nameByCallId]
   );
 
   const filtered = useMemo(() => {
@@ -74,7 +167,7 @@ export default function ReservationsPage() {
     const q = query.toLowerCase();
     return reservationViews.filter(
       (r) =>
-        r.guest_name.toLowerCase().includes(q) ||
+        r.displayName.toLowerCase().includes(q) ||
         (r.caller_phone ?? '').toLowerCase().includes(q) ||
         r.reservation_time.toLowerCase().includes(q) ||
         (r.notes ?? '').toLowerCase().includes(q) ||
@@ -100,20 +193,6 @@ export default function ReservationsPage() {
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">Reservations</h1>
             <p className="mt-1 text-sm text-slate-600 sm:text-base">Track table bookings captured from phone calls</p>
           </div>
-          <nav className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white p-1 md:flex">
-            <Link href="/" className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
-              Orders
-            </Link>
-            <Link
-              href="/calls"
-              className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
-            >
-              Calls
-            </Link>
-            <span className="rounded-lg bg-cyan-100 px-3 py-1.5 text-sm font-semibold text-cyan-900">
-              Reservations
-            </span>
-          </nav>
         </div>
         {!hasSupabaseConfig ? (
           <p className="mt-4 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">
@@ -167,7 +246,7 @@ export default function ReservationsPage() {
               ) : (
                 filtered.map((reservation) => (
                   <tr key={reservation.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
-                    <td className="px-3 py-3 font-semibold text-slate-800">{reservation.guest_name}</td>
+                    <td className="px-3 py-3 font-semibold text-slate-800">{reservation.displayName}</td>
                     <td className="px-3 py-3 text-slate-700">
                       {reservation.caller_phone ?? `Caller ${reservation.id.slice(-6)}`}
                     </td>
@@ -210,7 +289,7 @@ export default function ReservationsPage() {
                 <article key={reservation.id} className="rounded-xl border border-slate-200 bg-white p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-base font-semibold text-slate-900">{reservation.guest_name}</p>
+                      <p className="text-base font-semibold text-slate-900">{reservation.displayName}</p>
                       <p className="text-sm text-slate-600">{reservation.caller_phone ?? `Caller ${reservation.id.slice(-6)}`}</p>
                     </div>
                     <span
@@ -239,6 +318,43 @@ export default function ReservationsPage() {
       </section>
     </OpsShell>
   );
+}
+
+function resolveCallForReservation(reservation: Reservation, callsByPhone: Map<string, Call[]>) {
+  if (!reservation.caller_phone) return undefined;
+  const bucket = callsByPhone.get(reservation.caller_phone) ?? [];
+  if (bucket.length === 0) return undefined;
+
+  const reservationTs = new Date(reservation.created_at).getTime();
+  if (Number.isNaN(reservationTs)) return bucket[0];
+
+  let best: Call | undefined;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  for (const call of bucket) {
+    const callTs = new Date(call.created_at).getTime();
+    if (Number.isNaN(callTs)) continue;
+    const diff = Math.abs(reservationTs - callTs);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = call;
+    }
+  }
+  return best ?? bucket[0];
+}
+
+function looksLikeFallbackName(name: string) {
+  const lowered = name.toLowerCase().trim();
+  return lowered.startsWith('caller ') || lowered === 'caller' || lowered.includes('phone customer');
+}
+
+function resolveDisplayName(guestName: string, callId: string | undefined, nameByCallId: Map<string, string>) {
+  if (!looksLikeFallbackName(guestName)) return guestName;
+  if (!callId) return guestName;
+  return nameByCallId.get(callId) ?? guestName;
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 function parseDateTime(value: string) {

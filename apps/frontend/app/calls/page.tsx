@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { OpsShell } from '../../components/OpsShell';
 import { hasSupabaseConfig, supabase } from '../../lib/supabase';
@@ -181,18 +180,6 @@ export default function CallsPage() {
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">Live Calls</h1>
             <p className="mt-1 text-sm text-slate-600 sm:text-base">Track call status and call history from Twilio streams</p>
           </div>
-          <nav className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white p-1 md:flex">
-            <Link href="/" className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
-              Orders
-            </Link>
-            <Link
-              href="/reservations"
-              className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
-            >
-              Reservations
-            </Link>
-            <span className="rounded-lg bg-cyan-100 px-3 py-1.5 text-sm font-semibold text-cyan-900">Calls</span>
-          </nav>
         </div>
         {!hasSupabaseConfig ? (
           <p className="mt-4 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">

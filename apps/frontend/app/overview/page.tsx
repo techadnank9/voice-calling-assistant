@@ -8,12 +8,15 @@ import { hasSupabaseConfig, supabase } from '../../lib/supabase';
 type Order = {
   id: string;
   customer_name: string;
+  caller_phone: string | null;
+  notes?: string | null;
   total_cents: number;
   created_at: string;
 };
 
 type Call = {
   id: string;
+  twilio_call_sid?: string | null;
   from_number: string | null;
   status: string;
   created_at: string;
@@ -21,9 +24,18 @@ type Call = {
   ended_at?: string | null;
 };
 
+type CallMessage = {
+  id: string;
+  call_id: string;
+  role: string;
+  text: string;
+  created_at: string;
+};
+
 export default function OverviewPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [calls, setCalls] = useState<Call[]>([]);
+  const [callMessages, setCallMessages] = useState<CallMessage[]>([]);
 
   useEffect(() => {
     const client = supabase;
@@ -31,16 +43,30 @@ export default function OverviewPage() {
 
     const load = async () => {
       const [{ data: orderRows }, { data: callRows }] = await Promise.all([
-        client.from('orders').select('id,customer_name,total_cents,created_at').order('created_at', { ascending: false }).limit(300),
+        client.from('orders').select('id,customer_name,caller_phone,notes,total_cents,created_at').order('created_at', { ascending: false }).limit(300),
         client
           .from('calls')
-          .select('id,from_number,status,created_at,started_at,ended_at')
+          .select('id,twilio_call_sid,from_number,status,created_at,started_at,ended_at')
           .order('created_at', { ascending: false })
           .limit(300)
       ]);
 
       setOrders((orderRows as Order[]) ?? []);
-      setCalls((callRows as Call[]) ?? []);
+      const callList = (callRows as Call[]) ?? [];
+      setCalls(callList);
+
+      if (callList.length > 0) {
+        const callIds = callList.map((c) => c.id);
+        const { data: msgRows } = await client
+          .from('call_messages')
+          .select('id,call_id,role,text,created_at')
+          .in('call_id', callIds)
+          .order('created_at', { ascending: true })
+          .limit(3000);
+        setCallMessages((msgRows as CallMessage[]) ?? []);
+      } else {
+        setCallMessages([]);
+      }
     };
 
     load().catch(console.error);
@@ -49,6 +75,7 @@ export default function OverviewPage() {
       .channel('overview-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calls' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_messages' }, () => load())
       .subscribe();
 
     return () => {
@@ -102,13 +129,59 @@ export default function OverviewPage() {
   }, [calls]);
 
   const recentActivity = useMemo(() => {
+    const messagesByCall = new Map<string, CallMessage[]>();
+    for (const message of callMessages) {
+      const bucket = messagesByCall.get(message.call_id) ?? [];
+      bucket.push(message);
+      messagesByCall.set(message.call_id, bucket);
+    }
+
+    const callsBySid = new Map<string, Call>();
+    const callsByPhone = new Map<string, Call[]>();
+    const latestCallByPhone = new Map<string, Call>();
+    for (const call of calls) {
+      if (call.twilio_call_sid) callsBySid.set(call.twilio_call_sid, call);
+      if (!call.from_number) continue;
+      const bucket = callsByPhone.get(call.from_number) ?? [];
+      bucket.push(call);
+      callsByPhone.set(call.from_number, bucket);
+      if (!latestCallByPhone.has(call.from_number)) latestCallByPhone.set(call.from_number, call);
+    }
+    for (const [phone, bucket] of callsByPhone.entries()) {
+      bucket.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      callsByPhone.set(phone, bucket);
+    }
+
+    const nameByCallId = new Map<string, string>();
+    for (const call of calls) {
+      const rows = messagesByCall.get(call.id) ?? [];
+      const userText = rows
+        .filter((r) => r.role.toLowerCase() === 'user')
+        .map((r) => r.text)
+        .join(' ')
+        .toLowerCase();
+      const match =
+        userText.match(/my name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/this is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/i(?:\s|')?m\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        userText.match(/under\s+(?:the\s+)?name\s+([a-z]+(?:\s+[a-z]+){0,2})/);
+      if (match?.[1]) nameByCallId.set(call.id, titleCase(match[1]));
+    }
+
     return orders.slice(0, 4).map((o) => ({
       id: o.id,
-      customer: o.customer_name,
+      customer: resolveDisplayNameForOverview(
+        o,
+        callsBySid,
+        callsByPhone,
+        latestCallByPhone,
+        nameByCallId
+      ),
       amount: `$${(o.total_cents / 100).toFixed(2)}`,
       when: new Date(o.created_at).toLocaleString()
     }));
-  }, [orders]);
+  }, [orders, calls, callMessages]);
 
   return (
     <OpsShell active="overview">
@@ -185,6 +258,68 @@ export default function OverviewPage() {
       </section>
     </OpsShell>
   );
+}
+
+function extractCallSid(notes?: string | null) {
+  if (!notes) return null;
+  const match = notes.match(/\[auto:(CA[a-z0-9]+)\]/i);
+  return match?.[1] ?? null;
+}
+
+function resolveCallForOrder(
+  order: Order,
+  callsBySid: Map<string, Call>,
+  callsByPhone: Map<string, Call[]>,
+  latestCallByPhone: Map<string, Call>
+) {
+  const sid = extractCallSid(order.notes);
+  if (sid && callsBySid.has(sid)) return callsBySid.get(sid);
+
+  if (order.caller_phone) {
+    const bucket = callsByPhone.get(order.caller_phone) ?? [];
+    if (bucket.length > 0) {
+      const orderTs = new Date(order.created_at).getTime();
+      if (!Number.isNaN(orderTs)) {
+        let best: Call | undefined;
+        let bestDiff = Number.POSITIVE_INFINITY;
+        for (const call of bucket) {
+          const callTs = new Date(call.created_at).getTime();
+          if (Number.isNaN(callTs)) continue;
+          const diff = Math.abs(orderTs - callTs);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            best = call;
+          }
+        }
+        if (best) return best;
+      }
+    }
+    return latestCallByPhone.get(order.caller_phone);
+  }
+
+  return undefined;
+}
+
+function looksLikeFallbackName(name: string) {
+  const lowered = name.toLowerCase().trim();
+  return lowered.startsWith('caller ') || lowered === 'caller' || lowered.includes('phone customer');
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function resolveDisplayNameForOverview(
+  order: Order,
+  callsBySid: Map<string, Call>,
+  callsByPhone: Map<string, Call[]>,
+  latestCallByPhone: Map<string, Call>,
+  nameByCallId: Map<string, string>
+) {
+  if (!looksLikeFallbackName(order.customer_name)) return order.customer_name;
+  const call = resolveCallForOrder(order, callsBySid, callsByPhone, latestCallByPhone);
+  if (!call) return order.customer_name;
+  return nameByCallId.get(call.id) ?? order.customer_name;
 }
 
 function Metric({ title, value, subtitle }: { title: string; value: string; subtitle: string }) {
