@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import { z } from 'zod';
 import { env } from './config.js';
 import { logger } from './logger.js';
 import { buildMenuGuardPrompt, createOrder, createReservation, insertEvent, insertMessage } from './supabase.js';
@@ -13,6 +14,33 @@ type DeepgramEvent = {
   event?: string;
   [key: string]: unknown;
 };
+
+const orderToolSchema = z.object({
+  caller_phone: z.string().optional(),
+  customer_name: z.string().min(1),
+  pickup_time: z.string().optional(),
+  notes: z.string().optional(),
+  total_cents: z.number().int().nonnegative().optional(),
+  items: z
+    .array(
+      z.object({
+        menu_item_id: z.string().optional(),
+        qty: z.number().int().positive().optional(),
+        modifiers: z.array(z.unknown()).optional(),
+        line_total_cents: z.number().int().nonnegative().optional()
+      })
+    )
+    .optional()
+});
+
+const reservationToolSchema = z.object({
+  caller_phone: z.string().optional(),
+  guest_name: z.string().min(1),
+  party_size: z.number().int().positive().optional(),
+  reservation_time: z.string().optional(),
+  notes: z.string().optional(),
+  status: z.enum(['confirmed', 'escalated']).optional()
+});
 
 export class DeepgramCallSession {
   private readonly twilioWs: WebSocket;
@@ -335,31 +363,93 @@ export class DeepgramCallSession {
         ((evt.tool as { arguments?: Record<string, unknown> } | undefined)?.arguments ?? {}));
 
     if (name === 'create_order') {
-      const items = Array.isArray(args.items) ? (args.items as Array<Record<string, unknown>>) : [];
+      const parsed = orderToolSchema.safeParse(args);
+      if (!parsed.success) {
+        logger.warn(
+          { callSid: this.twilioCallSid, issues: parsed.error.issues, rawArgs: args },
+          'Invalid create_order tool payload'
+        );
+        return;
+      }
+      const payload = parsed.data;
+      const tag = `[auto:${this.twilioCallSid}]`;
+      const normalizedItems = (payload.items ?? []).map((item) => ({
+        menuItemId: item.menu_item_id,
+        qty: item.qty ?? 1,
+        modifierJson: item.modifiers ?? [],
+        lineTotalCents: item.line_total_cents
+      }));
+      const structuredOutput = {
+        schema_version: '1.0',
+        source: 'model_tool',
+        tool_name: 'create_order',
+        twilio_call_sid: this.twilioCallSid,
+        customer: {
+          name: payload.customer_name,
+          caller_phone: payload.caller_phone ?? null
+        },
+        order: {
+          pickup_time: payload.pickup_time ?? '20 minutes',
+          total_cents: payload.total_cents ?? 0,
+          items: normalizedItems
+        }
+      };
+      await insertEvent({
+        twilioCallSid: this.twilioCallSid,
+        eventType: 'structured_output',
+        payload: structuredOutput as Record<string, unknown>
+      }).catch(() => undefined);
+
       await createOrder({
-        callerPhone: typeof args.caller_phone === 'string' ? args.caller_phone : undefined,
-        customerName: String(args.customer_name ?? 'Unknown'),
-        pickupTime: String(args.pickup_time ?? '20 minutes'),
-        notes: typeof args.notes === 'string' ? args.notes : undefined,
-        totalCents: typeof args.total_cents === 'number' ? args.total_cents : undefined,
-        items: items.map((item) => ({
-          menuItemId: typeof item.menu_item_id === 'string' ? item.menu_item_id : undefined,
-          qty: Number(item.qty ?? 1),
-          modifierJson: Array.isArray(item.modifiers) ? (item.modifiers as unknown[]) : [],
-          lineTotalCents: typeof item.line_total_cents === 'number' ? item.line_total_cents : undefined
-        }))
-      }).catch((err) => logger.error({ err }, 'Failed to persist order'));
+        callerPhone: payload.caller_phone ?? undefined,
+        customerName: payload.customer_name,
+        pickupTime: payload.pickup_time ?? '20 minutes',
+        notes: `${payload.notes ?? ''} ${tag}`.trim(),
+        totalCents: payload.total_cents,
+        items: normalizedItems
+      }).catch((err) => logger.error({ err, callSid: this.twilioCallSid }, 'Failed to persist order'));
     }
 
     if (name === 'create_reservation') {
+      const parsed = reservationToolSchema.safeParse(args);
+      if (!parsed.success) {
+        logger.warn(
+          { callSid: this.twilioCallSid, issues: parsed.error.issues, rawArgs: args },
+          'Invalid create_reservation tool payload'
+        );
+        return;
+      }
+      const payload = parsed.data;
+      const tag = `[auto:${this.twilioCallSid}]`;
+      const structuredOutput = {
+        schema_version: '1.0',
+        source: 'model_tool',
+        tool_name: 'create_reservation',
+        twilio_call_sid: this.twilioCallSid,
+        customer: {
+          name: payload.guest_name,
+          caller_phone: payload.caller_phone ?? null
+        },
+        reservation: {
+          party_size: payload.party_size ?? 2,
+          reservation_time: payload.reservation_time ?? 'ASAP',
+          status: payload.status ?? 'confirmed'
+        }
+      };
+      await insertEvent({
+        twilioCallSid: this.twilioCallSid,
+        eventType: 'structured_output',
+        payload: structuredOutput as Record<string, unknown>
+      }).catch(() => undefined);
+
       await createReservation({
-        callerPhone: typeof args.caller_phone === 'string' ? args.caller_phone : undefined,
-        guestName: String(args.guest_name ?? 'Unknown'),
-        partySize: Number(args.party_size ?? 2),
-        reservationTime: String(args.reservation_time ?? ''),
-        notes: typeof args.notes === 'string' ? args.notes : undefined,
-        status: args.status === 'escalated' ? 'escalated' : 'confirmed'
-      }).catch((err) => logger.error({ err }, 'Failed to persist reservation'));
+        callerPhone: payload.caller_phone ?? undefined,
+        guestName: payload.guest_name,
+        partySize: payload.party_size ?? 2,
+        reservationTime: payload.reservation_time ?? 'ASAP',
+        notes: `${payload.notes ?? ''} ${tag}`.trim(),
+        status: payload.status ?? 'confirmed'
+      }).catch((err) => logger.error({ err, callSid: this.twilioCallSid }, 'Failed to persist reservation'));
     }
   }
 }

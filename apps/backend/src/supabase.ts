@@ -281,139 +281,102 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
 
   if (!transcript.trim()) return;
 
-  const tag = `[auto:${twilioCallSid}]`;
-  const nameMatch =
-    userTranscript.match(/my name is\\s+([a-z]+(?:\\s+[a-z]+){0,2})/) ??
-    userTranscript.match(/name\\s+is\\s+([a-z]+(?:\\s+[a-z]+){0,2})/) ??
-    userTranscript.match(/this is\\s+([a-z]+(?:\\s+[a-z]+){0,2})/) ??
-    userTranscript.match(/i(?:\\s|')?m\\s+([a-z]+(?:\\s+[a-z]+){0,2})/) ??
-    userTranscript.match(/under\\s+(?:the\\s+)?name\\s+([a-z]+(?:\\s+[a-z]+){0,2})/);
-  const fallbackCustomerName = callRow.from_number
-    ? `Caller ${callRow.from_number.replace(/\D/g, '').slice(-4)}`
-    : 'Caller';
-  const hasActualName = Boolean(nameMatch?.[1]);
-  const customerName = nameMatch?.[1]
-    ? nameMatch[1].replace(/\b\w/g, (m) => m.toUpperCase())
-    : fallbackCustomerName;
-
-  const timeMatch = transcript.match(/(\\d{1,2}(:\\d{2})?\\s?(am|pm))/i);
-  const timeValue = timeMatch?.[1] ?? '20 minutes';
-
   const { data: existingOrder } = await supabase
     .from('orders')
     .select('id')
-    .ilike('notes', `%${tag}%`)
+    .ilike('notes', `%[auto:${twilioCallSid}]%`)
     .limit(1)
     .maybeSingle();
 
   const { data: existingReservation } = await supabase
     .from('reservations')
     .select('id')
-    .ilike('notes', `%${tag}%`)
+    .ilike('notes', `%[auto:${twilioCallSid}]%`)
     .limit(1)
     .maybeSingle();
 
   const { data: menuRows } = await supabase.from('menu_items').select('id,name,price_cents').eq('active', true);
+  const structured = buildStructuredCallOutcome({
+    twilioCallSid,
+    fromNumber: callRow.from_number,
+    transcript,
+    userTranscript,
+    assistantTranscript,
+    menuRows:
+      (menuRows as Array<{ id: string; name: string; price_cents: number }> | null) ?? []
+  });
 
-  const assistantOrderSignals = assistantTranscript
-    .split('\n')
-    .filter((line) => line.includes('your order') || line.includes('you ordered') || line.includes('order for'))
-    .join(' ');
-
-  const transcriptForItems = `${userTranscript}\n${assistantOrderSignals}`;
-
-  const matchedItems =
-    menuRows?.filter((item) => transcriptForItems.includes(item.name.toLowerCase())).map((item) => ({
-      menuItemId: item.id,
-      qty: 1,
-      lineTotalCents: item.price_cents
-    })) ?? [];
-
-  const totalCents = matchedItems.reduce((sum, item) => sum + (item.lineTotalCents ?? 0), 0);
-
-  const indicatesOrder = transcript.includes('order') || matchedItems.length > 0;
-  const indicatesReservation =
-    transcript.includes('reservation') || transcript.includes('reserve') || transcript.includes('table for');
-
-  const matchedItemNames = matchedItems
-    .map((item) => menuRows?.find((m) => m.id === item.menuItemId)?.name)
-    .filter((name): name is string => Boolean(name))
-    .slice(0, 5);
+  await insertEvent({
+    twilioCallSid,
+    eventType: 'structured_output',
+    payload: structured as unknown as Record<string, unknown>
+  }).catch(() => undefined);
 
   const orderSummary = [
-    `${customerName} called to place a pickup order.`,
-    matchedItemNames.length > 0
-      ? `Items discussed: ${matchedItemNames.join(', ')}.`
+    `${structured.customer.name} called to place a pickup order.`,
+    structured.order.items.length > 0
+      ? `Items discussed: ${structured.order.items.map((item) => item.name).join(', ')}.`
       : 'Items were discussed and confirmed on call.',
-    `Pickup time confirmed as ${timeValue}.`,
-    `${tag} auto-captured from transcript`
+    `Pickup time confirmed as ${structured.order.pickup_time}.`,
+    `[auto:${twilioCallSid}] auto-captured from transcript`
   ].join(' ');
 
-  if (indicatesOrder && !existingOrder) {
+  if (structured.intents.order && !existingOrder) {
     logger.info(
       {
         twilioCallSid,
-        customerName,
-        matchedItems: matchedItems.map((i) => i.menuItemId),
-        totalCents
+        customerName: structured.customer.name,
+        matchedItems: structured.order.items.map((i) => i.menuItemId),
+        totalCents: structured.order.total_cents
       },
       'Creating fallback order from transcript'
     );
     await createOrder({
       callerPhone: callRow.from_number ?? undefined,
-      customerName,
-      pickupTime: timeValue,
+      customerName: structured.customer.name,
+      pickupTime: structured.order.pickup_time,
       notes: orderSummary,
-      totalCents: totalCents || 0,
-      items: matchedItems
+      totalCents: structured.order.total_cents,
+      items: structured.order.items.map((item) => ({
+        menuItemId: item.menuItemId,
+        qty: item.qty,
+        lineTotalCents: item.lineTotalCents
+      }))
     });
   }
-  if (!indicatesOrder) {
+  if (!structured.intents.order) {
     logger.info({ twilioCallSid }, 'No fallback order intent detected from transcript');
   } else if (existingOrder) {
     logger.info({ twilioCallSid }, 'Fallback order already exists for call');
   }
 
-  if (indicatesReservation && !existingReservation) {
-    const partyMatch = transcript.match(/table for\\s+(\\d+)/) ?? transcript.match(/party\\s+of\\s+(\\d+)/);
-    const partySize = Number(partyMatch?.[1] ?? '2');
-    const hasPartySize = Boolean(partyMatch?.[1]);
-    const dateMatch =
-      userTranscript.match(/\b(today|tonight|tomorrow)\b/i) ??
-      userTranscript.match(/\bon\s+([a-z]+\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,\\s*\\d{4})?)/i);
-    const reservationDate = dateMatch?.[1] ?? (dateMatch?.[0] ?? null);
-    const occasionMatch =
-      userTranscript.match(/\b(?:for|occasion is|it'?s|its)\s+(birthday|anniversary|date night|business dinner|family dinner|celebration|engagement|meeting)\b/i) ??
-      userTranscript.match(/\b(birthday|anniversary|date night|business dinner|family dinner|celebration|engagement|meeting)\b/i);
-    const occasion = occasionMatch?.[1] ?? null;
-    const hasReservationTime = Boolean(timeMatch?.[1]);
+  if (structured.intents.reservation && !existingReservation) {
+    const reservationSummary = [
+      `${structured.customer.name} called to reserve a table.`,
+      `Reservation date: ${structured.reservation.date}.`,
+      `Party size: ${structured.reservation.party_size}.`,
+      `Requested reservation time: ${structured.reservation.reservation_time}.`,
+      `Occasion: ${structured.reservation.occasion}.`,
+      `[auto:${twilioCallSid}] auto-captured from transcript`
+    ].join(' ');
 
-    const hasRequiredReservationFields = hasActualName && hasPartySize && hasReservationTime && Boolean(occasion);
-    if (hasRequiredReservationFields) {
-      const reservationSummary = [
-        `${customerName} called to reserve a table.`,
-        `Reservation date: ${reservationDate ?? 'today'}.`,
-        `Party size: ${Number.isFinite(partySize) ? partySize : 2}.`,
-        `Requested reservation time: ${timeValue}.`,
-        `Occasion: ${occasion}.`,
-        `${tag} auto-captured from transcript`
-      ].join(' ');
-      await createReservation({
-        callerPhone: callRow.from_number ?? undefined,
-        guestName: customerName,
-        partySize: Number.isFinite(partySize) ? partySize : 2,
-        reservationTime: timeValue,
-        notes: reservationSummary,
-        status: 'confirmed'
-      });
-    }
+    await createReservation({
+      callerPhone: callRow.from_number ?? undefined,
+      guestName: structured.customer.name,
+      partySize: structured.reservation.party_size,
+      reservationTime: structured.reservation.reservation_time,
+      notes: reservationSummary,
+      status: structured.reservation.status
+    });
   }
 
   const callSummary = [
-    `Call handled with ${customerName}.`,
-    indicatesOrder ? 'Order intent detected.' : null,
-    indicatesReservation ? 'Reservation intent detected.' : null,
-    matchedItemNames.length > 0 ? `Menu items mentioned: ${matchedItemNames.join(', ')}.` : null
+    `Call handled with ${structured.customer.name}.`,
+    structured.intents.order ? 'Order intent detected.' : null,
+    structured.intents.reservation ? 'Reservation intent detected.' : null,
+    structured.order.items.length > 0
+      ? `Menu items mentioned: ${structured.order.items.map((item) => item.name).slice(0, 5).join(', ')}.`
+      : null
   ]
     .filter(Boolean)
     .join(' ');
@@ -421,4 +384,115 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
   if (callSummary.trim()) {
     await supabase.from('calls').update({ summary: callSummary }).eq('id', callRow.id);
   }
+}
+
+type StructuredCallOutcome = {
+  schema_version: '1.0';
+  twilio_call_sid: string;
+  customer: {
+    name: string;
+    has_actual_name: boolean;
+    caller_phone: string | null;
+  };
+  intents: {
+    order: boolean;
+    reservation: boolean;
+  };
+  order: {
+    pickup_time: string;
+    total_cents: number;
+    items: Array<{ name: string; menuItemId?: string; qty: number; lineTotalCents: number }>;
+  };
+  reservation: {
+    party_size: number;
+    date: string;
+    reservation_time: string;
+    occasion: string;
+    status: 'confirmed' | 'escalated';
+  };
+};
+
+function buildStructuredCallOutcome(params: {
+  twilioCallSid: string;
+  fromNumber: string | null;
+  transcript: string;
+  userTranscript: string;
+  assistantTranscript: string;
+  menuRows: Array<{ id: string; name: string; price_cents: number }>;
+}): StructuredCallOutcome {
+  const { twilioCallSid, fromNumber, transcript, userTranscript, assistantTranscript, menuRows } = params;
+  const nameMatch =
+    userTranscript.match(/my name is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+    userTranscript.match(/name\s+is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+    userTranscript.match(/this is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+    userTranscript.match(/i(?:\s|')?m\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+    userTranscript.match(/under\s+(?:the\s+)?name\s+([a-z]+(?:\s+[a-z]+){0,2})/i);
+  const hasActualName = Boolean(nameMatch?.[1]);
+  const fallbackCustomerName = fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller';
+  const customerName = hasActualName
+    ? String(nameMatch?.[1] ?? '').replace(/\b\w/g, (m) => m.toUpperCase())
+    : fallbackCustomerName;
+
+  const timeMatch = transcript.match(/(\d{1,2}(:\d{2})?\s?(am|pm))/i);
+  const pickupTime = timeMatch?.[1] ?? '20 minutes';
+
+  const assistantOrderSignals = assistantTranscript
+    .split('\n')
+    .filter((line) => line.includes('your order') || line.includes('you ordered') || line.includes('order for'))
+    .join(' ');
+  const transcriptForItems = `${userTranscript}\n${assistantOrderSignals}`.toLowerCase();
+
+  const items =
+    menuRows
+      ?.filter((item) => transcriptForItems.includes(item.name.toLowerCase()))
+      .map((item) => ({
+        name: item.name,
+        menuItemId: item.id,
+        qty: 1,
+        lineTotalCents: item.price_cents
+      })) ?? [];
+  const totalCents = items.reduce((sum, item) => sum + item.lineTotalCents, 0);
+  const indicatesOrder = transcript.includes('order') || items.length > 0;
+  const indicatesReservation =
+    transcript.includes('reservation') || transcript.includes('reserve') || transcript.includes('table for');
+
+  const partyMatch = transcript.match(/table for\s+(\d+)/i) ?? transcript.match(/party\s+of\s+(\d+)/i);
+  const partySize = Number(partyMatch?.[1] ?? '2');
+  const hasPartySize = Boolean(partyMatch?.[1]);
+  const dateMatch =
+    userTranscript.match(/\b(today|tonight|tomorrow)\b/i) ??
+    userTranscript.match(/\bon\s+([a-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?)/i);
+  const reservationDate = dateMatch?.[1] ?? (dateMatch?.[0] ?? 'today');
+  const occasionMatch =
+    userTranscript.match(
+      /\b(?:for|occasion is|it'?s|its)\s+(birthday|anniversary|date night|business dinner|family dinner|celebration|engagement|meeting)\b/i
+    ) ?? userTranscript.match(/\b(birthday|anniversary|date night|business dinner|family dinner|celebration|engagement|meeting)\b/i);
+  const occasion = occasionMatch?.[1] ?? 'Not specified';
+  const hasReservationTime = Boolean(timeMatch?.[1]);
+
+  return {
+    schema_version: '1.0',
+    twilio_call_sid: twilioCallSid,
+    customer: {
+      name: customerName,
+      has_actual_name: hasActualName,
+      caller_phone: fromNumber
+    },
+    intents: {
+      order: indicatesOrder,
+      reservation: indicatesReservation
+    },
+    order: {
+      pickup_time: pickupTime,
+      total_cents: totalCents,
+      items
+    },
+    reservation: {
+      party_size: Number.isFinite(partySize) ? partySize : 2,
+      date: reservationDate,
+      reservation_time: hasReservationTime ? pickupTime : 'ASAP',
+      occasion,
+      status: hasActualName && hasPartySize && hasReservationTime ? 'confirmed' : 'escalated'
+    }
+  };
 }

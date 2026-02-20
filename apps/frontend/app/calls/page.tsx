@@ -12,6 +12,7 @@ type Call = {
   status: string;
   started_at: string | null;
   ended_at: string | null;
+  summary?: string | null;
 };
 
 type CallMessage = {
@@ -41,9 +42,9 @@ export default function CallsPage() {
     const load = async () => {
       const { data } = await client
         .from('calls')
-        .select('id,twilio_call_sid,from_number,to_number,status,started_at,ended_at')
+        .select('id,twilio_call_sid,from_number,to_number,status,started_at,ended_at,summary')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(200);
 
       const callRows = (data as Call[]) ?? [];
       setCalls(callRows);
@@ -58,8 +59,8 @@ export default function CallsPage() {
         .from('call_messages')
         .select('id,call_id,role,text,created_at')
         .in('call_id', callIds)
-        .order('created_at', { ascending: true })
-        .limit(400);
+        .order('created_at', { ascending: false })
+        .limit(5000);
 
       setMessages((msgData as CallMessage[]) ?? []);
 
@@ -124,6 +125,10 @@ export default function CallsPage() {
       bucket.push(message);
       map.set(message.call_id, bucket);
     }
+    for (const [callId, bucket] of map.entries()) {
+      bucket.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      map.set(callId, bucket);
+    }
     return map;
   }, [messages]);
 
@@ -161,12 +166,18 @@ export default function CallsPage() {
         joinedUserText.match(/my name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
         joinedUserText.match(/name is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
         joinedUserText.match(/this is\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        joinedUserText.match(/it(?:\s|')?s\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
+        joinedUserText.match(/([a-z]+(?:\s+[a-z]+){0,2})\s+speaking/) ??
         joinedUserText.match(/i(?:\s|')?m\s+([a-z]+(?:\s+[a-z]+){0,2})/) ??
         joinedUserText.match(/under\s+(?:the\s+)?name\s+([a-z]+(?:\s+[a-z]+){0,2})/);
 
       if (nameMatch?.[1]) {
         map.set(call.id, titleCase(nameMatch[1]));
+        continue;
       }
+
+      const inferred = inferNameFromMessageSequence(messagesForCall);
+      if (inferred) map.set(call.id, inferred);
     }
     return map;
   }, [calls, customerNameByPhone, messagesByCall]);
@@ -212,10 +223,11 @@ export default function CallsPage() {
                 </div>
                 <p className="mt-1 text-xs text-slate-500">SID: {call.twilio_call_sid}</p>
                 <p className="mt-1 text-xs text-slate-500">Started: {formatPretty(call.started_at)} | Ended: {formatPretty(call.ended_at)}</p>
+                <p className="mt-1 text-xs text-slate-500">Duration: {formatDuration(call.started_at, call.ended_at)}</p>
                 <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Conversation Preview</p>
                   {((messagesByCall.get(call.id) ?? []).length === 0) ? (
-                    <p className="mt-1 text-xs text-slate-400">No transcript captured for this call.</p>
+                    <p className="mt-1 text-xs text-slate-400">{formatSummaryFallback(call.summary)}</p>
                   ) : (
                     <ul className="mt-1 max-h-44 space-y-1 overflow-y-auto pr-1 text-xs text-slate-700">
                       {dedupePreview(messagesByCall.get(call.id) ?? []).map((message) => (
@@ -278,6 +290,22 @@ function formatPretty(v: string | null) {
   return `${day}${suffix} ${month} ${year}, ${time}`;
 }
 
+function formatDuration(startedAt: string | null, endedAt: string | null) {
+  if (!startedAt || !endedAt) return 'N/A';
+  const start = new Date(startedAt).getTime();
+  const end = new Date(endedAt).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return 'N/A';
+  const sec = Math.floor((end - start) / 1000);
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return `${min}m ${rem.toString().padStart(2, '0')}s`;
+}
+
+function formatSummaryFallback(summary?: string | null) {
+  if (!summary || !summary.trim()) return 'No transcript captured for this call.';
+  return summary.trim();
+}
+
 function displayFrom(from: string | null, sid: string) {
   if (from && from.trim().length > 0) return from;
   return `Caller ${sid.slice(-6)}`;
@@ -292,7 +320,7 @@ function formatRole(role: string, callId: string, customerNameByCallId: Map<stri
   const r = role.toLowerCase();
   if (r === 'user') {
     const n = customerNameByCallId.get(callId);
-    return n ? n : 'Customer';
+    return n ? n : 'Caller';
   }
   if (r === 'assistant') return 'Agent';
   return role;
@@ -316,4 +344,26 @@ function dedupePreview(messages: CallMessage[]) {
     seen.add(key);
     return true;
   });
+}
+
+function inferNameFromMessageSequence(messages: CallMessage[]) {
+  for (let i = 1; i < messages.length; i += 1) {
+    const prev = messages[i - 1];
+    const curr = messages[i];
+    if (prev.role.toLowerCase() !== 'assistant' || curr.role.toLowerCase() !== 'user') continue;
+
+    if (!/(name|full name|what should i call you)/i.test(prev.text)) continue;
+    const cleaned = curr.text
+      .replace(/[^\p{L}\s'-]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) continue;
+
+    const words = cleaned.split(' ').filter(Boolean);
+    if (words.length >= 1 && words.length <= 3) {
+      const likelyName = words.every((w) => /^[\p{L}'-]+$/u.test(w));
+      if (likelyName) return titleCase(cleaned.toLowerCase());
+    }
+  }
+  return null;
 }
