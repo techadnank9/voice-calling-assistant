@@ -11,7 +11,7 @@ export function OpsShell({ active, children }: { active: PageKey; children: Reac
       <div className="mx-auto max-w-[1520px]">
         <div className="mb-2 rounded-xl border border-slate-200 bg-white px-3 py-2 lg:hidden">
           <div className="flex items-center justify-between">
-            <p className="text-lg font-black tracking-tight text-slate-900">◉ Loman</p>
+            <p className="text-lg font-black tracking-tight text-slate-900">◉ OrderDesk</p>
             <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">Active</span>
           </div>
           <div className="mt-2 flex flex-wrap gap-2 pb-1">
@@ -29,7 +29,7 @@ export function OpsShell({ active, children }: { active: PageKey; children: Reac
                 active === 'orders' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
               }`}
             >
-              Calls &amp; Orders
+              Orders
             </Link>
             <Link
               href="/calls"
@@ -52,13 +52,13 @@ export function OpsShell({ active, children }: { active: PageKey; children: Reac
 
         <div className="grid gap-0 lg:grid-cols-[230px_1fr] lg:items-start">
           <aside className="hidden border-r border-slate-200 bg-white px-3 pt-3 pb-3 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:overflow-y-auto">
-            <p className="px-2 py-2 text-2xl font-black tracking-tight">◉ Loman</p>
+            <p className="px-2 py-2 text-2xl font-black tracking-tight">◉ OrderDesk</p>
             <ul className="mt-2 space-y-1 text-[16px] font-medium text-slate-700">
               <li className={`rounded-xl px-3 py-2 ${active === 'overview' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
                 <Link href="/overview">Overview</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'orders' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/">Calls &amp; Orders</Link>
+                <Link href="/">Orders</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'calls' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
                 <Link href="/calls">Calls</Link>

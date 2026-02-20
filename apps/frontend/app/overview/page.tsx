@@ -98,13 +98,35 @@ export default function OverviewPage() {
     }, 0);
     const completed = inboundCalls.filter((c) => c.status === 'completed').length;
     const inProgress = inboundCalls.filter((c) => c.status === 'in_progress').length;
+    const inboundTotal = inboundCalls.length;
+    const completionRate = inboundTotal > 0 ? Math.round((completed / inboundTotal) * 100) : 0;
+    const completedWithDuration = inboundCalls.filter((c) => {
+      if (!c.started_at || !c.ended_at) return false;
+      const start = new Date(c.started_at).getTime();
+      const end = new Date(c.ended_at).getTime();
+      return !Number.isNaN(start) && !Number.isNaN(end) && end > start;
+    });
+    const avgDurationSec =
+      completedWithDuration.length > 0
+        ? Math.round(
+            completedWithDuration.reduce((sum, c) => {
+              const start = new Date(c.started_at as string).getTime();
+              const end = new Date(c.ended_at as string).getTime();
+              return sum + Math.floor((end - start) / 1000);
+            }, 0) / completedWithDuration.length
+          )
+        : 0;
     return {
       revenue: `$${(revenueCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       orders: orders.length,
       minutesUsed: totalMinutes,
       uniqueCallers,
+      inboundTotal,
       completed,
       inProgress
+      ,
+      completionRate,
+      avgDurationSec
     };
   }, [orders, calls]);
 
@@ -239,14 +261,13 @@ export default function OverviewPage() {
 
       <section className="mt-4 grid gap-3 md:grid-cols-2">
         <article className="rounded-2xl border border-slate-200 p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Coverage</h3>
-          <div className="mt-4 flex items-center gap-4">
-            <div className="h-28 w-28 rounded-full border-[14px] border-emerald-400 border-r-slate-200 border-t-cyan-400" />
-            <div className="text-sm text-slate-600">
-              <p>Inbound handled by agent</p>
-              <p className="mt-1 font-semibold text-slate-900">{stats.completed} completed</p>
-              <p className="mt-1 font-semibold text-slate-900">{stats.inProgress} in progress</p>
-            </div>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Call Health</h3>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <HealthStat label="Inbound Calls" value={String(stats.inboundTotal)} />
+            <HealthStat label="Completed" value={String(stats.completed)} />
+            <HealthStat label="In Progress" value={String(stats.inProgress)} />
+            <HealthStat label="Completion Rate" value={`${stats.completionRate}%`} />
+            <HealthStat label="Avg Duration" value={formatSeconds(stats.avgDurationSec)} />
           </div>
         </article>
 
@@ -330,6 +351,23 @@ function Metric({ title, value, subtitle }: { title: string; value: string; subt
       <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
     </article>
   );
+}
+
+function HealthStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-bold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function formatSeconds(sec: number) {
+  if (sec <= 0) return '0s';
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  if (min === 0) return `${rem}s`;
+  return `${min}m ${rem.toString().padStart(2, '0')}s`;
 }
 
 function CallLineChart({ labels, values }: { labels: string[]; values: number[] }) {

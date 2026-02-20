@@ -291,7 +291,7 @@ export default function HomePage() {
   return (
     <OpsShell active="orders">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-5xl">☎ Calls &amp; Orders</h1>
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-5xl">Orders</h1>
                   <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 sm:text-[14px]">📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span></span>
                 </div>
 
@@ -317,6 +317,7 @@ export default function HomePage() {
                       <tr>
                         <th className="px-3 py-2">Phone Number</th>
                         <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Date</th>
                         <th className="px-3 py-2">Time</th>
                         <th className="px-3 py-2">Items</th>
                         <th className="px-3 py-2">Total</th>
@@ -327,7 +328,7 @@ export default function HomePage() {
                     <tbody>
                       {filtered.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-3 py-6 text-center text-slate-500">No orders yet</td>
+                          <td colSpan={8} className="px-3 py-6 text-center text-slate-500">No orders yet</td>
                         </tr>
                       ) : (
                         filtered.map((order) => {
@@ -335,6 +336,7 @@ export default function HomePage() {
                           const call = resolveCallForOrder(order, callsBySid, callsByPhone, latestCallByPhone);
                           const displayName = resolveDisplayName(order.customer_name, call?.id, nameByCallId);
                           const duration = formatDuration(call?.started_at ?? null, call?.ended_at ?? null);
+                          const rowDate = formatRowDate(call?.created_at ?? order.created_at);
                           const rowTime = formatRowTime(call?.created_at ?? order.created_at);
                           return (
                             <tr
@@ -344,6 +346,7 @@ export default function HomePage() {
                             >
                               <td className="px-3 py-3 font-semibold text-slate-800">{order.caller_phone ?? 'Restaurant Caller'}</td>
                               <td className="px-3 py-3 text-slate-700">{displayName}</td>
+                              <td className="px-3 py-3 text-slate-700">{rowDate}</td>
                               <td className="px-3 py-3 text-slate-700">{rowTime}</td>
                               <td className="px-3 py-3 text-indigo-600">{count} item{count === 1 ? '' : 's'}</td>
                               <td className="px-3 py-3 font-bold text-slate-900">${(order.total_cents / 100).toFixed(2)}</td>
@@ -365,6 +368,7 @@ export default function HomePage() {
                           const call = resolveCallForOrder(order, callsBySid, callsByPhone, latestCallByPhone);
                           const displayName = resolveDisplayName(order.customer_name, call?.id, nameByCallId);
                           const duration = formatDuration(call?.started_at ?? null, call?.ended_at ?? null);
+                          const rowDate = formatRowDate(call?.created_at ?? order.created_at);
                           const rowTime = formatRowTime(call?.created_at ?? order.created_at);
                           return (
                             <button
@@ -382,7 +386,7 @@ export default function HomePage() {
                               </div>
                               <p className="mt-1 text-sm text-slate-600">{order.caller_phone ?? 'Restaurant Caller'}</p>
                               <div className="mt-2 flex items-center justify-between text-sm">
-                                <span className="text-slate-600">{rowTime}</span>
+                                <span className="text-slate-600">{rowDate} · {rowTime}</span>
                                 <span className="font-medium text-indigo-600">
                                   {count} item{count === 1 ? '' : 's'}
                                 </span>
@@ -469,6 +473,12 @@ function formatRowTime(value: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function formatRowDate(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'Not captured';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function extractCallSid(notes?: string | null) {

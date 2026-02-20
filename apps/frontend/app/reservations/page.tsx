@@ -207,13 +207,6 @@ export default function ReservationsPage() {
         <StatCard label="Escalated" value={String(stats.escalated)} tone="amber" />
         <StatCard label="Today" value={String(stats.today)} tone="cyan" />
       </section>
-      <section className="mt-4">
-        <p className="text-sm text-slate-600">
-          Data quality: <span className="font-semibold text-slate-900">{stats.complete}/{stats.total}</span> reservations have
-          guest name, date, time, party size, and occasion.
-        </p>
-      </section>
-
       <section className="mt-6">
         <input
           value={query}
