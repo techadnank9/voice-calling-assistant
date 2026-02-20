@@ -198,6 +198,49 @@ export async function createReservation(params: {
   if (error) throw error;
 }
 
+export async function upsertStructuredOutput(params: {
+  twilioCallSid: string;
+  source: 'model_tool' | 'transcript_fallback';
+  parseStatus?: 'ok' | 'failed';
+  payload: StructuredCallOutcome;
+}) {
+  const { data: callRow, error: callError } = await supabase
+    .from('calls')
+    .select('id')
+    .eq('twilio_call_sid', params.twilioCallSid)
+    .maybeSingle();
+  if (callError || !callRow) throw callError ?? new Error('Call row not found for structured output');
+
+  const { error } = await supabase.from('call_structured_outputs').upsert(
+    {
+      call_id: callRow.id,
+      source: params.source,
+      schema_version: params.payload.schema_version,
+      payload: params.payload,
+      parse_status: params.parseStatus ?? 'ok',
+      updated_at: new Date().toISOString()
+    },
+    { onConflict: 'call_id' }
+  );
+  if (error) throw error;
+}
+
+export async function getStructuredOutputByCallSid(twilioCallSid: string) {
+  const { data: callRow } = await supabase
+    .from('calls')
+    .select('id')
+    .eq('twilio_call_sid', twilioCallSid)
+    .maybeSingle();
+  if (!callRow) return null;
+
+  const { data } = await supabase
+    .from('call_structured_outputs')
+    .select('payload,source,parse_status')
+    .eq('call_id', callRow.id)
+    .maybeSingle();
+  return data ?? null;
+}
+
 export async function buildMenuGuardPrompt(): Promise<string> {
   const { data, error } = await supabase
     .from('menu_items')
@@ -281,94 +324,34 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
 
   if (!transcript.trim()) return;
 
-  const { data: existingOrder } = await supabase
-    .from('orders')
-    .select('id')
-    .ilike('notes', `%[auto:${twilioCallSid}]%`)
-    .limit(1)
-    .maybeSingle();
-
-  const { data: existingReservation } = await supabase
-    .from('reservations')
-    .select('id')
-    .ilike('notes', `%[auto:${twilioCallSid}]%`)
-    .limit(1)
-    .maybeSingle();
-
-  const { data: menuRows } = await supabase.from('menu_items').select('id,name,price_cents').eq('active', true);
-  const structured = buildStructuredCallOutcome({
-    twilioCallSid,
-    fromNumber: callRow.from_number,
-    transcript,
-    userTranscript,
-    assistantTranscript,
-    menuRows:
-      (menuRows as Array<{ id: string; name: string; price_cents: number }> | null) ?? []
-  });
-
-  await insertEvent({
-    twilioCallSid,
-    eventType: 'structured_output',
-    payload: structured as unknown as Record<string, unknown>
-  }).catch(() => undefined);
-
-  const orderSummary = [
-    `${structured.customer.name} called to place a pickup order.`,
-    structured.order.items.length > 0
-      ? `Items discussed: ${structured.order.items.map((item) => item.name).join(', ')}.`
-      : 'Items were discussed and confirmed on call.',
-    `Pickup time confirmed as ${structured.order.pickup_time}.`,
-    `[auto:${twilioCallSid}] auto-captured from transcript`
-  ].join(' ');
-
-  if (structured.intents.order && !existingOrder) {
-    logger.info(
-      {
-        twilioCallSid,
-        customerName: structured.customer.name,
-        matchedItems: structured.order.items.map((i) => i.menuItemId),
-        totalCents: structured.order.total_cents
-      },
-      'Creating fallback order from transcript'
-    );
-    await createOrder({
-      callerPhone: callRow.from_number ?? undefined,
-      customerName: structured.customer.name,
-      pickupTime: structured.order.pickup_time,
-      notes: orderSummary,
-      totalCents: structured.order.total_cents,
-      items: structured.order.items.map((item) => ({
-        menuItemId: item.menuItemId,
-        qty: item.qty,
-        lineTotalCents: item.lineTotalCents
-      }))
+  const existingStructured = await getStructuredOutputByCallSid(twilioCallSid);
+  let structured: StructuredCallOutcome;
+  if (existingStructured?.payload) {
+    structured = existingStructured.payload as unknown as StructuredCallOutcome;
+  } else {
+    const { data: menuRows } = await supabase.from('menu_items').select('id,name,price_cents').eq('active', true);
+    structured = buildStructuredCallOutcome({
+      twilioCallSid,
+      fromNumber: callRow.from_number,
+      transcript,
+      userTranscript,
+      assistantTranscript,
+      menuRows:
+        (menuRows as Array<{ id: string; name: string; price_cents: number }> | null) ?? []
     });
-  }
-  if (!structured.intents.order) {
-    logger.info({ twilioCallSid }, 'No fallback order intent detected from transcript');
-  } else if (existingOrder) {
-    logger.info({ twilioCallSid }, 'Fallback order already exists for call');
+    await upsertStructuredOutput({
+      twilioCallSid,
+      source: 'transcript_fallback',
+      payload: structured
+    }).catch((error) => logger.error({ error, twilioCallSid }, 'Failed to upsert structured fallback output'));
+    await insertEvent({
+      twilioCallSid,
+      eventType: 'structured_output',
+      payload: structured as unknown as Record<string, unknown>
+    }).catch(() => undefined);
   }
 
-  if (structured.intents.reservation && !existingReservation) {
-    const reservationSummary = [
-      `${structured.customer.name} called to reserve a table.`,
-      `Reservation date: ${structured.reservation.date}.`,
-      `Party size: ${structured.reservation.party_size}.`,
-      `Requested reservation time: ${structured.reservation.reservation_time}.`,
-      `Occasion: ${structured.reservation.occasion}.`,
-      `[auto:${twilioCallSid}] auto-captured from transcript`
-    ].join(' ');
-
-    await createReservation({
-      callerPhone: callRow.from_number ?? undefined,
-      guestName: structured.customer.name,
-      partySize: structured.reservation.party_size,
-      reservationTime: structured.reservation.reservation_time,
-      notes: reservationSummary,
-      status: structured.reservation.status
-    });
-  }
+  await materializeFromStructuredOutput(twilioCallSid, callRow.from_number, structured);
 
   const callSummary = [
     `Call handled with ${structured.customer.name}.`,
@@ -386,7 +369,7 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
   }
 }
 
-type StructuredCallOutcome = {
+export type StructuredCallOutcome = {
   schema_version: '1.0';
   twilio_call_sid: string;
   customer: {
@@ -412,6 +395,69 @@ type StructuredCallOutcome = {
   };
 };
 
+export async function materializeFromStructuredOutput(
+  twilioCallSid: string,
+  fromNumber: string | null,
+  structured: StructuredCallOutcome
+) {
+  const tag = `[auto:${twilioCallSid}]`;
+  const { data: existingOrder } = await supabase
+    .from('orders')
+    .select('id')
+    .ilike('notes', `%${tag}%`)
+    .limit(1)
+    .maybeSingle();
+
+  const { data: existingReservation } = await supabase
+    .from('reservations')
+    .select('id')
+    .ilike('notes', `%${tag}%`)
+    .limit(1)
+    .maybeSingle();
+
+  if (structured.intents.order && !existingOrder) {
+    const orderSummary = [
+      `${structured.customer.name} called to place a pickup order.`,
+      structured.order.items.length > 0
+        ? `Items discussed: ${structured.order.items.map((item) => item.name).join(', ')}.`
+        : 'Items were discussed and confirmed on call.',
+      `Pickup time confirmed as ${structured.order.pickup_time}.`,
+      `${tag} auto-captured from transcript`
+    ].join(' ');
+    await createOrder({
+      callerPhone: fromNumber ?? undefined,
+      customerName: structured.customer.name,
+      pickupTime: structured.order.pickup_time,
+      notes: orderSummary,
+      totalCents: structured.order.total_cents,
+      items: structured.order.items.map((item) => ({
+        menuItemId: item.menuItemId,
+        qty: item.qty,
+        lineTotalCents: item.lineTotalCents
+      }))
+    });
+  }
+
+  if (structured.intents.reservation && !existingReservation) {
+    const reservationSummary = [
+      `${structured.customer.name} called to reserve a table.`,
+      `Reservation date: ${structured.reservation.date}.`,
+      `Party size: ${structured.reservation.party_size}.`,
+      `Requested reservation time: ${structured.reservation.reservation_time}.`,
+      `Occasion: ${structured.reservation.occasion}.`,
+      `${tag} auto-captured from transcript`
+    ].join(' ');
+    await createReservation({
+      callerPhone: fromNumber ?? undefined,
+      guestName: structured.customer.name,
+      partySize: structured.reservation.party_size,
+      reservationTime: structured.reservation.reservation_time,
+      notes: reservationSummary,
+      status: structured.reservation.status
+    });
+  }
+}
+
 function buildStructuredCallOutcome(params: {
   twilioCallSid: string;
   fromNumber: string | null;
@@ -421,17 +467,28 @@ function buildStructuredCallOutcome(params: {
   menuRows: Array<{ id: string; name: string; price_cents: number }>;
 }): StructuredCallOutcome {
   const { twilioCallSid, fromNumber, transcript, userTranscript, assistantTranscript, menuRows } = params;
+  const normalizedUser = userTranscript.replace(/[,\n]+/g, ' ');
   const nameMatch =
-    userTranscript.match(/my name is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-    userTranscript.match(/name\s+is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-    userTranscript.match(/this is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-    userTranscript.match(/i(?:\s|')?m\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-    userTranscript.match(/under\s+(?:the\s+)?name\s+([a-z]+(?:\s+[a-z]+){0,2})/i);
-  const hasActualName = Boolean(nameMatch?.[1]);
+    normalizedUser.match(/my name is\s+(?:like\s+)?([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+    normalizedUser.match(/name\s+is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+    normalizedUser.match(/this is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+    normalizedUser.match(/it(?:\s|')?s\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+    normalizedUser.match(/([a-z]+(?:\s+[a-z]+){0,2})\s+speaking/i) ??
+    normalizedUser.match(/i(?:\s|')?m\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+    normalizedUser.match(/under\s+(?:the\s+)?name\s+([a-z]+(?:\s+[a-z]+){0,2})/i);
+
+  let extractedName = nameMatch?.[1] ?? null;
+  if (!extractedName) {
+    const assistantName =
+      assistantTranscript.match(/thank you,\s*(mr\.|mrs\.|ms\.)?\s*([a-z]+(?:\s+[a-z]+){0,2})/i) ??
+      assistantTranscript.match(/thanks,\s*(mr\.|mrs\.|ms\.)?\s*([a-z]+(?:\s+[a-z]+){0,2})/i);
+    if (assistantName?.[2]) extractedName = assistantName[2];
+  }
+
+  const cleanedName = sanitizeExtractedName(extractedName);
+  const hasActualName = Boolean(cleanedName);
   const fallbackCustomerName = fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller';
-  const customerName = hasActualName
-    ? String(nameMatch?.[1] ?? '').replace(/\b\w/g, (m) => m.toUpperCase())
-    : fallbackCustomerName;
+  const customerName = hasActualName ? titleCase(cleanedName ?? '') : fallbackCustomerName;
 
   const timeMatch = transcript.match(/(\d{1,2}(:\d{2})?\s?(am|pm))/i);
   const pickupTime = timeMatch?.[1] ?? '20 minutes';
@@ -456,9 +513,9 @@ function buildStructuredCallOutcome(params: {
   const indicatesReservation =
     transcript.includes('reservation') || transcript.includes('reserve') || transcript.includes('table for');
 
-  const partyMatch = transcript.match(/table for\s+(\d+)/i) ?? transcript.match(/party\s+of\s+(\d+)/i);
-  const partySize = Number(partyMatch?.[1] ?? '2');
-  const hasPartySize = Boolean(partyMatch?.[1]);
+  const combinedReservationText = `${userTranscript}\n${assistantTranscript}`.toLowerCase();
+  const partySize = extractPartySize(combinedReservationText);
+  const hasPartySize = partySize !== null;
   const dateMatch =
     userTranscript.match(/\b(today|tonight|tomorrow)\b/i) ??
     userTranscript.match(/\bon\s+([a-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?)/i);
@@ -469,6 +526,9 @@ function buildStructuredCallOutcome(params: {
     ) ?? userTranscript.match(/\b(birthday|anniversary|date night|business dinner|family dinner|celebration|engagement|meeting)\b/i);
   const occasion = occasionMatch?.[1] ?? 'Not specified';
   const hasReservationTime = Boolean(timeMatch?.[1]);
+  const assistantConfirmedReservation = /(?:reservation|table).*(?:confirmed|reserved)|you have a reservation|your table.*reserved/i.test(
+    assistantTranscript
+  );
 
   return {
     schema_version: '1.0',
@@ -488,11 +548,64 @@ function buildStructuredCallOutcome(params: {
       items
     },
     reservation: {
-      party_size: Number.isFinite(partySize) ? partySize : 2,
+      party_size: hasPartySize ? partySize ?? 2 : 2,
       date: reservationDate,
       reservation_time: hasReservationTime ? pickupTime : 'ASAP',
       occasion,
-      status: hasActualName && hasPartySize && hasReservationTime ? 'confirmed' : 'escalated'
+      status:
+        (assistantConfirmedReservation && hasPartySize && hasReservationTime) ||
+        (hasActualName && hasPartySize && hasReservationTime)
+          ? 'confirmed'
+          : 'escalated'
     }
   };
+}
+
+function sanitizeExtractedName(name: string | null) {
+  if (!name) return null;
+  const cleaned = name
+    .replace(/[^\p{L}\s'-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return null;
+  const lowered = cleaned.toLowerCase();
+  if (['fine', 'okay', 'ok', 'yes', 'no', 'name', 'my name', 'customer'].includes(lowered)) return null;
+  const words = cleaned.split(' ').filter(Boolean);
+  if (words.length === 0 || words.length > 3) return null;
+  return cleaned;
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function extractPartySize(text: string): number | null {
+  const wordToNumber: Record<string, number> = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12
+  };
+
+  const numericMatch =
+    text.match(/party\s+of\s+(\d{1,2})/i) ??
+    text.match(/table\s+for\s+(\d{1,2})/i) ??
+    text.match(/for\s+(\d{1,2})\s+(?:people|persons|guests)/i);
+  if (numericMatch?.[1]) return Number(numericMatch[1]);
+
+  const wordMatch =
+    text.match(/party\s+of\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i) ??
+    text.match(/table\s+for\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i) ??
+    text.match(/for\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:people|persons|guests)\b/i);
+  if (wordMatch?.[1]) return wordToNumber[wordMatch[1].toLowerCase()] ?? null;
+
+  return null;
 }

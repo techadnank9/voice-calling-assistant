@@ -30,6 +30,17 @@ create table if not exists call_events (
   created_at timestamptz not null default now()
 );
 
+create table if not exists call_structured_outputs (
+  id uuid primary key default gen_random_uuid(),
+  call_id uuid not null unique references calls(id) on delete cascade,
+  source text not null default 'transcript_fallback',
+  schema_version text not null default '1.0',
+  payload jsonb not null default '{}'::jsonb,
+  parse_status text not null default 'ok',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists menu_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -103,3 +114,4 @@ create table if not exists restaurant_settings (
 alter publication supabase_realtime add table calls;
 alter publication supabase_realtime add table orders;
 alter publication supabase_realtime add table reservations;
+alter publication supabase_realtime add table call_structured_outputs;

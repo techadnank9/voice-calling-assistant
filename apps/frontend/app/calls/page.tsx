@@ -30,10 +30,18 @@ type CustomerRecord = {
   created_at: string;
 };
 
+type StructuredEvent = {
+  call_id: string;
+  source?: string;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+};
+
 export default function CallsPage() {
   const [calls, setCalls] = useState<Call[]>([]);
   const [messages, setMessages] = useState<CallMessage[]>([]);
   const [customerRecords, setCustomerRecords] = useState<CustomerRecord[]>([]);
+  const [structuredEvents, setStructuredEvents] = useState<StructuredEvent[]>([]);
 
   useEffect(() => {
     const client = supabase;
@@ -55,14 +63,32 @@ export default function CallsPage() {
       }
 
       const callIds = callRows.map((c) => c.id);
-      const { data: msgData } = await client
-        .from('call_messages')
-        .select('id,call_id,role,text,created_at')
-        .in('call_id', callIds)
-        .order('created_at', { ascending: false })
-        .limit(5000);
+      const [{ data: msgData }, { data: structuredData }] = await Promise.all([
+        client
+          .from('call_messages')
+          .select('id,call_id,role,text,created_at')
+          .in('call_id', callIds)
+          .order('created_at', { ascending: false })
+          .limit(5000),
+        client
+          .from('call_structured_outputs')
+          .select('call_id,source,payload,updated_at')
+          .in('call_id', callIds)
+          .order('updated_at', { ascending: false })
+          .limit(1000)
+      ]);
 
       setMessages((msgData as CallMessage[]) ?? []);
+      setStructuredEvents(
+        (((structuredData as Array<{ call_id: string; source: string; payload: Record<string, unknown>; updated_at: string }> | null) ?? []).map(
+          (r) => ({
+            call_id: r.call_id,
+            source: r.source,
+            payload: r.payload,
+            created_at: r.updated_at
+          })
+        ) as StructuredEvent[])
+      );
 
       const phones = [...new Set(callRows.map((c) => c.from_number).filter(Boolean))] as string[];
       if (phones.length > 0) {
@@ -105,6 +131,7 @@ export default function CallsPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calls' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_structured_outputs' }, () => load())
       .subscribe();
 
     return () => {
@@ -182,6 +209,22 @@ export default function CallsPage() {
     return map;
   }, [calls, customerNameByPhone, messagesByCall]);
 
+  const structuredByCall = useMemo(() => {
+    const grouped = new Map<string, StructuredEvent[]>();
+    for (const event of structuredEvents) {
+      const bucket = grouped.get(event.call_id) ?? [];
+      bucket.push(event);
+      grouped.set(event.call_id, bucket);
+    }
+
+    const map = new Map<string, StructuredEvent>();
+    for (const [callId, bucket] of grouped.entries()) {
+      const preferred = bucket.find((event) => event.source === 'model_tool') ?? bucket[0];
+      map.set(callId, preferred);
+    }
+    return map;
+  }, [structuredEvents]);
+
   return (
     <OpsShell active="calls">
       <header className="border-b border-slate-200 pb-4">
@@ -241,6 +284,14 @@ export default function CallsPage() {
                     </ul>
                   )}
                 </div>
+                <details className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
+                  <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Structured Output JSON
+                  </summary>
+                  <pre className="mt-2 max-h-56 overflow-auto rounded-md bg-slate-900 p-2 text-[11px] text-slate-100">
+                    {JSON.stringify(structuredByCall.get(call.id)?.payload ?? { message: 'No structured_output event for this call yet.' }, null, 2)}
+                  </pre>
+                </details>
               </div>
             ))
           )}

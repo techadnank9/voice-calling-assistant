@@ -2,7 +2,14 @@ import WebSocket from 'ws';
 import { z } from 'zod';
 import { env } from './config.js';
 import { logger } from './logger.js';
-import { buildMenuGuardPrompt, createOrder, createReservation, insertEvent, insertMessage } from './supabase.js';
+import {
+  buildMenuGuardPrompt,
+  insertEvent,
+  insertMessage,
+  materializeFromStructuredOutput,
+  upsertStructuredOutput,
+  type StructuredCallOutcome
+} from './supabase.js';
 
 type TwilioMediaPayload = {
   event?: string;
@@ -24,6 +31,7 @@ const orderToolSchema = z.object({
   items: z
     .array(
       z.object({
+        name: z.string().optional(),
         menu_item_id: z.string().optional(),
         qty: z.number().int().positive().optional(),
         modifiers: z.array(z.unknown()).optional(),
@@ -372,42 +380,50 @@ export class DeepgramCallSession {
         return;
       }
       const payload = parsed.data;
-      const tag = `[auto:${this.twilioCallSid}]`;
       const normalizedItems = (payload.items ?? []).map((item) => ({
+        name: item.name ?? 'item',
         menuItemId: item.menu_item_id,
         qty: item.qty ?? 1,
-        modifierJson: item.modifiers ?? [],
-        lineTotalCents: item.line_total_cents
+        lineTotalCents: item.line_total_cents ?? 0
       }));
-      const structuredOutput = {
+      const structuredOutput: StructuredCallOutcome = {
         schema_version: '1.0',
-        source: 'model_tool',
-        tool_name: 'create_order',
         twilio_call_sid: this.twilioCallSid,
         customer: {
           name: payload.customer_name,
+          has_actual_name: true,
           caller_phone: payload.caller_phone ?? null
         },
+        intents: { order: true, reservation: false },
         order: {
           pickup_time: payload.pickup_time ?? '20 minutes',
           total_cents: payload.total_cents ?? 0,
           items: normalizedItems
+        },
+        reservation: {
+          party_size: 2,
+          date: 'Not specified',
+          reservation_time: 'ASAP',
+          occasion: 'Not specified',
+          status: 'escalated'
         }
       };
+      await upsertStructuredOutput({
+        twilioCallSid: this.twilioCallSid,
+        source: 'model_tool',
+        payload: structuredOutput
+      }).catch((err) => logger.error({ err, callSid: this.twilioCallSid }, 'Failed to upsert structured order output'));
       await insertEvent({
         twilioCallSid: this.twilioCallSid,
         eventType: 'structured_output',
         payload: structuredOutput as Record<string, unknown>
       }).catch(() => undefined);
 
-      await createOrder({
-        callerPhone: payload.caller_phone ?? undefined,
-        customerName: payload.customer_name,
-        pickupTime: payload.pickup_time ?? '20 minutes',
-        notes: `${payload.notes ?? ''} ${tag}`.trim(),
-        totalCents: payload.total_cents,
-        items: normalizedItems
-      }).catch((err) => logger.error({ err, callSid: this.twilioCallSid }, 'Failed to persist order'));
+      await materializeFromStructuredOutput(
+        this.twilioCallSid,
+        payload.caller_phone ?? null,
+        structuredOutput
+      ).catch((err) => logger.error({ err, callSid: this.twilioCallSid }, 'Failed to materialize order from structured output'));
     }
 
     if (name === 'create_reservation') {
@@ -420,36 +436,48 @@ export class DeepgramCallSession {
         return;
       }
       const payload = parsed.data;
-      const tag = `[auto:${this.twilioCallSid}]`;
-      const structuredOutput = {
+      const structuredOutput: StructuredCallOutcome = {
         schema_version: '1.0',
-        source: 'model_tool',
-        tool_name: 'create_reservation',
         twilio_call_sid: this.twilioCallSid,
         customer: {
           name: payload.guest_name,
+          has_actual_name: true,
           caller_phone: payload.caller_phone ?? null
+        },
+        intents: { order: false, reservation: true },
+        order: {
+          pickup_time: '20 minutes',
+          total_cents: 0,
+          items: []
         },
         reservation: {
           party_size: payload.party_size ?? 2,
+          date: 'Not specified',
           reservation_time: payload.reservation_time ?? 'ASAP',
+          occasion: 'Not specified',
           status: payload.status ?? 'confirmed'
         }
       };
+      await upsertStructuredOutput({
+        twilioCallSid: this.twilioCallSid,
+        source: 'model_tool',
+        payload: structuredOutput
+      }).catch((err) =>
+        logger.error({ err, callSid: this.twilioCallSid }, 'Failed to upsert structured reservation output')
+      );
       await insertEvent({
         twilioCallSid: this.twilioCallSid,
         eventType: 'structured_output',
         payload: structuredOutput as Record<string, unknown>
       }).catch(() => undefined);
 
-      await createReservation({
-        callerPhone: payload.caller_phone ?? undefined,
-        guestName: payload.guest_name,
-        partySize: payload.party_size ?? 2,
-        reservationTime: payload.reservation_time ?? 'ASAP',
-        notes: `${payload.notes ?? ''} ${tag}`.trim(),
-        status: payload.status ?? 'confirmed'
-      }).catch((err) => logger.error({ err, callSid: this.twilioCallSid }, 'Failed to persist reservation'));
+      await materializeFromStructuredOutput(
+        this.twilioCallSid,
+        payload.caller_phone ?? null,
+        structuredOutput
+      ).catch((err) =>
+        logger.error({ err, callSid: this.twilioCallSid }, 'Failed to materialize reservation from structured output')
+      );
     }
   }
 }
