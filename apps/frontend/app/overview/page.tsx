@@ -210,10 +210,10 @@ export default function OverviewPage() {
       <header className="border-b border-slate-200 pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">Good afternoon, New Delhi Ops</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">Good afternoon, New Delhi Ops</h1>
             <p className="mt-1 text-sm text-slate-500 sm:text-base">◷ It&apos;s {new Date().toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}</p>
           </div>
-          <div className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+          <div className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 sm:w-auto">
             📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span>
           </div>
         </div>
@@ -224,7 +224,7 @@ export default function OverviewPage() {
         ) : null}
       </header>
 
-      <section className="mt-6 grid gap-3 md:grid-cols-3">
+      <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Metric title="Revenue" value={stats.revenue} subtitle="This Month" />
         <Metric title="Orders" value={String(stats.orders)} subtitle="This Month" />
         <Metric title="Minutes Used" value={String(stats.minutesUsed)} subtitle="This Month" />
@@ -232,20 +232,20 @@ export default function OverviewPage() {
 
       <section className="mt-4 grid gap-3 xl:grid-cols-[1.45fr_0.95fr]">
         <article className="rounded-2xl border border-slate-200 p-4">
-          <h2 className="text-2xl font-semibold text-slate-900">Calls</h2>
+          <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">Calls</h2>
           <CallLineChart labels={callTrend.labels} values={callTrend.values} />
         </article>
 
         <article className="rounded-2xl border border-slate-200 p-4">
-          <h2 className="text-2xl font-semibold text-slate-900">Recent Activity</h2>
+          <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">Recent Activity</h2>
           <div className="mt-3 space-y-2">
             {recentActivity.length === 0 ? (
               <p className="text-sm text-slate-500">No activity yet.</p>
             ) : (
               recentActivity.map((a) => (
-                <div key={a.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                <div key={a.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                   <div>
-                    <p className="font-semibold text-slate-800">{a.customer}</p>
+                    <p className="font-semibold text-slate-800 line-clamp-1">{a.customer}</p>
                     <p className="text-xs text-slate-500">{a.when}</p>
                   </div>
                   <p className="font-semibold text-slate-900">{a.amount}</p>
@@ -346,8 +346,8 @@ function resolveDisplayNameForOverview(
 function Metric({ title, value, subtitle }: { title: string; value: string; subtitle: string }) {
   return (
     <article className="rounded-2xl border border-slate-200 p-4">
-      <p className="text-3 font-medium text-slate-500">{title}</p>
-      <p className="mt-2 text-5xl font-bold tracking-tight text-slate-900">{value}</p>
+      <p className="text-sm font-medium text-slate-500">{title}</p>
+      <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{value}</p>
       <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
     </article>
   );
@@ -371,8 +371,8 @@ function formatSeconds(sec: number) {
 }
 
 function CallLineChart({ labels, values }: { labels: string[]; values: number[] }) {
-  const width = 720;
-  const height = 220;
+  const width = 640;
+  const height = 210;
   const padding = 26;
   const max = Math.max(1, ...values);
   const yTicks = [0, Math.ceil(max * 0.25), Math.ceil(max * 0.5), Math.ceil(max * 0.75), max];
@@ -385,7 +385,7 @@ function CallLineChart({ labels, values }: { labels: string[]; values: number[] 
 
   return (
     <div className="mt-3 overflow-x-auto">
-      <svg viewBox={`0 0 ${width} ${height + 24}`} className="h-[240px] w-full min-w-[520px]">
+      <svg viewBox={`0 0 ${width} ${height + 24}`} className="h-[220px] w-full min-w-[360px] sm:h-[240px] sm:min-w-[520px]">
         {uniqueYTicks.map((tick) => {
           const y = height - padding - (tick / max) * (height - padding * 2);
           return (
