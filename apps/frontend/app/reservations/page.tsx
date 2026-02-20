@@ -148,7 +148,7 @@ export default function ReservationsPage() {
   const reservationViews = useMemo<ReservationView[]>(
     () =>
       reservations.map((r) => {
-        const { dateLabel, timeLabel } = parseDateTime(r.reservation_time);
+        const { dateLabel, timeLabel } = parseDateTime(r.reservation_time, r.notes, r.created_at);
         const occasion = extractOccasion(r.notes);
         const call = resolveCallForReservation(r, callsByPhone);
         const displayName = resolveDisplayName(r.guest_name, call?.id, nameByCallId);
@@ -357,17 +357,48 @@ function titleCase(value: string) {
   return value.replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function parseDateTime(value: string) {
+function parseDateTime(value: string, notes: string | null, createdAt: string) {
   const cleaned = value.replace(/\s+/g, ' ').trim();
   const timeMatch = cleaned.match(/\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/i);
   const dateMatch =
     cleaned.match(/\b(today|tonight|tomorrow)\b/i) ??
     cleaned.match(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,\s*\d{4})?\b/i) ??
     cleaned.match(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/);
+
+  const notesText = (notes ?? '').replace(/\s+/g, ' ').trim();
+  const notesDateMatch =
+    notesText.match(/reservation date:\s*([^.\n]+)/i) ??
+    notesText.match(/\b(today|tonight|tomorrow)\b/i) ??
+    notesText.match(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,\s*\d{4})?\b/i) ??
+    notesText.match(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/);
+  const notesTimeMatch =
+    notesText.match(/requested reservation time:\s*([^.\n]+)/i) ??
+    notesText.match(/\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/i);
+
+  const rawDate = dateMatch?.[0] ?? notesDateMatch?.[1] ?? notesDateMatch?.[0] ?? null;
+  const normalizedDate = normalizeRelativeDate(rawDate, createdAt);
+
   return {
-    dateLabel: dateMatch?.[0] ?? 'Not captured',
-    timeLabel: timeMatch?.[0] ?? 'Not captured'
+    dateLabel: normalizedDate ?? 'Not captured',
+    timeLabel: timeMatch?.[0] ?? notesTimeMatch?.[1] ?? notesTimeMatch?.[0] ?? 'Not captured'
   };
+}
+
+function normalizeRelativeDate(value: string | null, createdAt: string) {
+  if (!value) return null;
+  const raw = value.trim();
+  const lowered = raw.toLowerCase();
+  if (!['today', 'tomorrow', 'tonight'].includes(lowered)) return raw;
+
+  const base = new Date(createdAt);
+  if (Number.isNaN(base.getTime())) return raw;
+  if (lowered === 'tomorrow') base.setDate(base.getDate() + 1);
+
+  return base.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
 }
 
 function extractOccasion(notes: string | null) {
