@@ -3,8 +3,8 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
-  title: 'Voice Assistant Dashboard',
-  description: 'Orders, reservations, and live call monitoring'
+  title: 'OrderDesk',
+  description: 'AI voice operations platform for restaurant calls, orders, and reservations'
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

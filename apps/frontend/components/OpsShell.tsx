@@ -40,7 +40,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                 Overview
               </Link>
               <Link
-                href="/"
+                href="/orders"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
                   active === 'orders' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
@@ -114,7 +114,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                 <Link href="/overview">Overview</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'orders' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/">Orders</Link>
+                <Link href="/orders">Orders</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'calls' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
                 <Link href="/calls">Calls</Link>
