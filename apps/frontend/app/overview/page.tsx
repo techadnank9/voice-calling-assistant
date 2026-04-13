@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { OpsShell } from '../../components/OpsShell';
+import { getBackendBaseUrl, getBackendLinkLabel } from '../../lib/backend-link';
 import { hasSupabaseConfig, supabase } from '../../lib/supabase';
 
 type Order = {
@@ -31,6 +32,9 @@ type CallMessage = {
   text: string;
   created_at: string;
 };
+
+const backendUrl = getBackendBaseUrl(process.env.NEXT_PUBLIC_BACKEND_BASE_URL);
+const backendLabel = getBackendLinkLabel();
 
 export default function OverviewPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -214,7 +218,15 @@ export default function OverviewPage() {
             <p className="mt-1 text-sm text-slate-500 sm:text-base">◷ It&apos;s {new Date().toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}</p>
           </div>
           <div className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 sm:w-auto">
-            📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span>
+            📍 New Delhi Restaurant{' '}
+            <a
+              href={backendUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 transition hover:bg-emerald-200"
+            >
+              {backendLabel}
+            </a>
           </div>
         </div>
         {!hasSupabaseConfig ? (

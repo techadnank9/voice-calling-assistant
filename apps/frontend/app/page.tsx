@@ -1,4 +1,8 @@
 import Link from 'next/link';
+import { getBackendBaseUrl, getBackendLinkLabel } from '../lib/backend-link';
+
+const backendUrl = getBackendBaseUrl(process.env.NEXT_PUBLIC_BACKEND_BASE_URL);
+const backendLabel = getBackendLinkLabel();
 
 export default function LandingPage() {
   return (
@@ -77,7 +81,17 @@ export default function LandingPage() {
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white p-4 sm:p-5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-2xl font-bold tracking-tight">Good afternoon, New Delhi Ops</h3>
-                    <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium">📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span></span>
+                    <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium">
+                      📍 New Delhi Restaurant{' '}
+                      <a
+                        href={backendUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 transition hover:bg-emerald-200"
+                      >
+                        {backendLabel}
+                      </a>
+                    </span>
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">

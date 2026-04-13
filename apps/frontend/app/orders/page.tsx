@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { OpsShell } from '../../components/OpsShell';
+import { getBackendBaseUrl, getBackendLinkLabel } from '../../lib/backend-link';
 import { hasSupabaseConfig, supabase } from '../../lib/supabase';
 
 type Order = {
@@ -14,6 +15,9 @@ type Order = {
   created_at: string;
   notes?: string | null;
 };
+
+const backendUrl = getBackendBaseUrl(process.env.NEXT_PUBLIC_BACKEND_BASE_URL);
+const backendLabel = getBackendLinkLabel();
 
 type OrderItem = {
   id: string;
@@ -292,7 +296,17 @@ export default function HomePage() {
     <OpsShell active="orders">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-5xl">Orders</h1>
-                  <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 sm:text-[14px]">📍 New Delhi Restaurant <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Active</span></span>
+                  <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 sm:text-[14px]">
+                    📍 New Delhi Restaurant{' '}
+                    <a
+                      href={backendUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 transition hover:bg-emerald-200"
+                    >
+                      {backendLabel}
+                    </a>
+                  </span>
                 </div>
 
                 {!hasSupabaseConfig ? (

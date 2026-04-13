@@ -3,12 +3,15 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { getBackendBaseUrl, getBackendLinkLabel } from '../lib/backend-link';
 
 type PageKey = 'overview' | 'orders' | 'calls' | 'reservations';
 type ExtendedPageKey = PageKey | 'reports' | 'earnings' | 'settings' | 'support';
 
 export function OpsShell({ active, children }: { active: ExtendedPageKey; children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const backendUrl = getBackendBaseUrl(process.env.NEXT_PUBLIC_BACKEND_BASE_URL);
+  const backendLabel = getBackendLinkLabel();
 
   return (
     <main className="min-h-screen px-3 pb-24 pt-4 sm:px-6 sm:pb-6">
@@ -17,7 +20,14 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
           <div className="flex items-center justify-between">
             <p className="text-lg font-black tracking-tight text-slate-900">◉ OrderDesk</p>
             <div className="flex items-center gap-2">
-              <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">Active</span>
+              <a
+                href={backendUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-200"
+              >
+                {backendLabel}
+              </a>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen((v) => !v)}
@@ -137,9 +147,6 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
               </li>
             </ul>
             <div className="sticky bottom-0 mt-auto bg-white pb-2 pt-3">
-              <div className="rounded-xl bg-emerald-100 px-3 py-2 text-[13px] font-semibold text-emerald-800">
-                Active - Handling calls
-              </div>
               <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-700">
                   N
