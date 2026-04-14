@@ -555,6 +555,10 @@ function buildStructuredCallOutcome(params: {
     if (assistantName?.[2]) extractedName = assistantName[2];
   }
 
+  if (!extractedName) {
+    extractedName = extractStandaloneName(userTranscript);
+  }
+
   const cleanedName = sanitizeExtractedName(extractedName);
   const hasActualName = Boolean(cleanedName);
   const fallbackCustomerName = resolvedCallerPhone ? `Caller ${resolvedCallerPhone.replace(/\D/g, '').slice(-4)}` : 'Caller';
@@ -632,6 +636,52 @@ function buildStructuredCallOutcome(params: {
   };
 }
 
+const GENERIC_NAME_STOPWORDS = new Set([
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'the',
+  'a',
+  'an',
+  'of',
+  'customer',
+  'order',
+  'caller',
+  'user',
+  'restaurant',
+  'please',
+  'okay',
+  'ok'
+]);
+
+function extractStandaloneName(text: string): string | null {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const candidate = lines[i];
+    if (!/^[a-zA-Z ]+$/.test(candidate)) continue;
+    const words = candidate.split(' ').filter(Boolean);
+    if (words.length === 0 || words.length > 3) continue;
+    if (containsOnlyGenericWords(words)) continue;
+    return candidate;
+  }
+  return null;
+}
+
+function containsOnlyGenericWords(words: string[]) {
+  if (words.length === 0) return true;
+  return words.every((word) => GENERIC_NAME_STOPWORDS.has(word.toLowerCase()));
+}
+
 function sanitizeExtractedName(name: string | null) {
   if (!name) return null;
   const cleaned = name
@@ -643,6 +693,7 @@ function sanitizeExtractedName(name: string | null) {
   if (['fine', 'okay', 'ok', 'yes', 'no', 'name', 'my name', 'customer', 'user', 'caller'].includes(lowered)) return null;
   const words = cleaned.split(' ').filter(Boolean);
   if (words.length === 0 || words.length > 3) return null;
+  if (containsOnlyGenericWords(words)) return null;
   return cleaned;
 }
 
