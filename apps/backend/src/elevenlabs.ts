@@ -71,6 +71,7 @@ export function verifyElevenLabsSignature(params: {
 }
 
 export function mapElevenLabsTranscriptToMessages(turns: ElevenLabsTranscriptTurn[] | undefined | null) {
+  const baseMs = Date.now();
   return (turns ?? [])
     .map((turn) => {
       const role = turn.role === 'user' ? 'user' : turn.role === 'agent' ? 'assistant' : null;
@@ -78,7 +79,11 @@ export function mapElevenLabsTranscriptToMessages(turns: ElevenLabsTranscriptTur
       if (!role || !text) return null;
       return { role, text };
     })
-    .filter((value): value is { role: 'user' | 'assistant'; text: string } => Boolean(value));
+    .filter((value): value is { role: 'user' | 'assistant'; text: string } => Boolean(value))
+    .map((message, index) => ({
+      ...message,
+      createdAt: new Date(baseMs + index).toISOString()
+    }));
 }
 
 export function matchesConfiguredElevenLabsAgent(

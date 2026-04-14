@@ -33,17 +33,19 @@ test('verifyElevenLabsSignature accepts valid hmac payloads', () => {
 });
 
 test('mapElevenLabsTranscriptToMessages normalizes agent and user roles', () => {
-  assert.deepEqual(
-    mapElevenLabsTranscriptToMessages([
+  const messages = mapElevenLabsTranscriptToMessages([
       { role: 'agent', message: 'Hello there' },
       { role: 'user', message: 'I want butter chicken' },
       { role: 'system', message: 'ignored' }
-    ]),
-    [
-      { role: 'assistant', text: 'Hello there' },
-      { role: 'user', text: 'I want butter chicken' }
-    ]
-  );
+    ]);
+
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0]?.role, 'assistant');
+  assert.equal(messages[0]?.text, 'Hello there');
+  assert.equal(messages[1]?.role, 'user');
+  assert.equal(messages[1]?.text, 'I want butter chicken');
+  assert.ok(messages[0]?.createdAt);
+  assert.ok(messages[1]?.createdAt);
 });
 
 test('matchesConfiguredElevenLabsAgent allows matching and missing agent ids', () => {

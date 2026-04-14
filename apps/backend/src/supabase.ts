@@ -99,7 +99,7 @@ export async function insertMessage(params: {
 
 export async function replaceMessages(params: {
   twilioCallSid: string;
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; text: string }>;
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; text: string; createdAt?: string }>;
 }) {
   let { data: callRow, error: callError } = await supabase
     .from('calls')
@@ -133,7 +133,8 @@ export async function replaceMessages(params: {
       call_id: callRow.id,
       role: message.role,
       text: message.text,
-      confidence: null
+      confidence: null,
+      created_at: message.createdAt ?? undefined
     }))
   );
   if (insertError) throw insertError;
@@ -404,7 +405,19 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
     }).catch(() => undefined);
   }
 
-  await materializeFromStructuredOutput(twilioCallSid, callRow.from_number, structured);
+  if (!callRow.from_number && structured.customer.caller_phone) {
+    await supabase
+      .from('calls')
+      .update({ from_number: structured.customer.caller_phone })
+      .eq('id', callRow.id);
+    callRow.from_number = structured.customer.caller_phone;
+  }
+
+  await materializeFromStructuredOutput(
+    twilioCallSid,
+    callRow.from_number ?? structured.customer.caller_phone ?? null,
+    structured
+  );
 
   const callSummary = [
     `Call handled with ${structured.customer.name}.`,
@@ -523,6 +536,8 @@ function buildStructuredCallOutcome(params: {
 }): StructuredCallOutcome {
   const { twilioCallSid, provider, fromNumber, transcript, userTranscript, assistantTranscript, menuRows } = params;
   const normalizedUser = userTranscript.replace(/[,\n]+/g, ' ');
+  const inferredPhone = extractCallerPhone(userTranscript) ?? extractCallerPhone(transcript);
+  const resolvedCallerPhone = fromNumber ?? inferredPhone;
   const nameMatch =
     normalizedUser.match(/my name is\s+(?:like\s+)?([a-z]+(?:\s+[a-z]+){0,2})/i) ??
     normalizedUser.match(/name\s+is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
@@ -542,7 +557,7 @@ function buildStructuredCallOutcome(params: {
 
   const cleanedName = sanitizeExtractedName(extractedName);
   const hasActualName = Boolean(cleanedName);
-  const fallbackCustomerName = fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller';
+  const fallbackCustomerName = resolvedCallerPhone ? `Caller ${resolvedCallerPhone.replace(/\D/g, '').slice(-4)}` : 'Caller';
   const customerName = hasActualName ? titleCase(cleanedName ?? '') : fallbackCustomerName;
 
   const timeMatch = transcript.match(/(\d{1,2}(:\d{2})?\s?(am|pm))/i);
@@ -592,7 +607,7 @@ function buildStructuredCallOutcome(params: {
     customer: {
       name: customerName,
       has_actual_name: hasActualName,
-      caller_phone: fromNumber
+      caller_phone: resolvedCallerPhone
     },
     intents: {
       order: indicatesOrder,
@@ -625,7 +640,7 @@ function sanitizeExtractedName(name: string | null) {
     .trim();
   if (!cleaned) return null;
   const lowered = cleaned.toLowerCase();
-  if (['fine', 'okay', 'ok', 'yes', 'no', 'name', 'my name', 'customer'].includes(lowered)) return null;
+  if (['fine', 'okay', 'ok', 'yes', 'no', 'name', 'my name', 'customer', 'user', 'caller'].includes(lowered)) return null;
   const words = cleaned.split(' ').filter(Boolean);
   if (words.length === 0 || words.length > 3) return null;
   return cleaned;
@@ -663,5 +678,15 @@ function extractPartySize(text: string): number | null {
     text.match(/for\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:people|persons|guests)\b/i);
   if (wordMatch?.[1]) return wordToNumber[wordMatch[1].toLowerCase()] ?? null;
 
+  return null;
+}
+
+function extractCallerPhone(text: string): string | null {
+  const matches = text.match(/(?:\+?1[\s.-]*)?(?:\(?\d{3}\)?[\s.-]*)\d{3}[\s.-]*\d{4}/g);
+  if (!matches || matches.length === 0) return null;
+
+  const digits = matches[matches.length - 1]?.replace(/\D/g, '') ?? '';
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
   return null;
 }
