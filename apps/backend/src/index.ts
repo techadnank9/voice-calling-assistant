@@ -1,16 +1,36 @@
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import express, { type Request, type Response } from 'express';
 import pinoHttp from 'pino-http';
 import { WebSocketServer } from 'ws';
 import twilio from 'twilio';
+import {
+  getElevenLabsCallStatus,
+  mapElevenLabsTranscriptToMessages,
+  matchesConfiguredElevenLabsAgent,
+  verifyElevenLabsSignature,
+  type ElevenLabsWebhookEvent
+} from './elevenlabs.js';
 import { env } from './config.js';
 import { DeepgramCallSession } from './deepgramSession.js';
 import { logger } from './logger.js';
-import { insertEvent, persistFallbackOrderAndReservationFromCall, reconcileStaleInProgressCalls, upsertCall } from './supabase.js';
+import {
+  insertEvent,
+  persistFallbackOrderAndReservationFromCall,
+  reconcileStaleInProgressCalls,
+  replaceMessages,
+  upsertCall
+} from './supabase.js';
 
 const app = express();
 app.use(pinoHttp.default({ logger }));
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buffer) => {
+      (req as Request & { rawBody?: string }).rawBody = buffer.toString('utf8');
+    }
+  })
+);
 app.use(express.urlencoded({ extended: false }));
 
 const twilioWebhookValidator = (req: Request, res: Response, next: () => void) => {
@@ -42,6 +62,90 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'voice-calling-assistant-backend' });
 });
 
+app.post('/elevenlabs/voice', async (req, res) => {
+  const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {});
+
+  if (env.ELEVENLABS_WEBHOOK_SECRET) {
+    const isValid = verifyElevenLabsSignature({
+      rawBody,
+      signatureHeader: req.header('elevenlabs-signature'),
+      secret: env.ELEVENLABS_WEBHOOK_SECRET
+    });
+
+    if (!isValid) {
+      res.status(401).json({ error: 'Invalid ElevenLabs signature' });
+      return;
+    }
+  }
+
+  const event = (req.body ?? {}) as ElevenLabsWebhookEvent;
+  if (!matchesConfiguredElevenLabsAgent(event, env.ELEVENLABS_AGENT_ID)) {
+    res.status(403).json({ error: 'Unexpected ElevenLabs agent_id' });
+    return;
+  }
+
+  const conversationId = String(event.data?.conversation_id ?? '');
+  if (!conversationId) {
+    res.status(400).json({ error: 'Missing conversation_id' });
+    return;
+  }
+
+  const from = event.data?.metadata?.phone_call?.from_number ?? '';
+  const to = event.data?.metadata?.phone_call?.to_number ?? '';
+  const startedAt = event.data?.metadata?.start_time_unix_secs
+    ? new Date(event.data.metadata.start_time_unix_secs * 1000).toISOString()
+    : new Date().toISOString();
+  const endedAt =
+    event.data?.metadata?.start_time_unix_secs && event.data?.metadata?.call_duration_secs
+      ? new Date((event.data.metadata.start_time_unix_secs + event.data.metadata.call_duration_secs) * 1000).toISOString()
+      : new Date().toISOString();
+
+  logger.info({ conversationId, from, to, type: event.type }, 'ElevenLabs webhook received');
+
+  await upsertCall({
+    twilioCallSid: conversationId,
+    provider: 'elevenlabs',
+    fromNumber: from || undefined,
+    toNumber: to || undefined,
+    status: getElevenLabsCallStatus(event),
+    startedAt,
+    endedAt
+  }).catch((error) => logger.error({ error, conversationId }, 'Failed to upsert ElevenLabs call'));
+
+  await insertEvent({
+    twilioCallSid: conversationId,
+    provider: 'elevenlabs',
+    eventType: `elevenlabs.${event.type ?? 'unknown'}`,
+    payload: event as Record<string, unknown>
+  }).catch(() => undefined);
+
+  if (event.type === 'post_call_transcription') {
+    const transcriptMessages = mapElevenLabsTranscriptToMessages(event.data?.transcript);
+    await replaceMessages({
+      twilioCallSid: conversationId,
+      messages: transcriptMessages
+    }).catch((error) => logger.error({ error, conversationId }, 'Failed to replace ElevenLabs transcript turns'));
+
+    await persistFallbackOrderAndReservationFromCall(conversationId).catch((error) =>
+      logger.error({ error, conversationId }, 'Failed to persist ElevenLabs fallback order/reservation')
+    );
+  }
+
+  if (event.type === 'call_initiation_failure') {
+    await replaceMessages({
+      twilioCallSid: conversationId,
+      messages: [
+        {
+          role: 'system',
+          text: `ElevenLabs call initiation failed. Reference ${conversationId || randomUUID()}.`
+        }
+      ]
+    }).catch(() => undefined);
+  }
+
+  res.status(200).json({ ok: true });
+});
+
 app.post('/twilio/voice', twilioWebhookValidator, async (req, res) => {
   const callSid = String(req.body.CallSid ?? '');
   const from = String(req.body.From ?? '');
@@ -51,6 +155,7 @@ app.post('/twilio/voice', twilioWebhookValidator, async (req, res) => {
   if (callSid) {
     await upsertCall({
       twilioCallSid: callSid,
+      provider: 'deepgram',
       fromNumber: from,
       toNumber: to,
       status: 'in_progress',
@@ -115,6 +220,7 @@ wss.on('connection', (ws) => {
 
       await insertEvent({
         twilioCallSid: activeCallSid,
+        provider: 'deepgram',
         eventType: 'twilio.start',
         payload: payload as Record<string, unknown>
       }).catch(() => undefined);
@@ -136,6 +242,7 @@ wss.on('connection', (ws) => {
       sessions.delete(activeCallSid);
       await upsertCall({
         twilioCallSid: activeCallSid,
+        provider: 'deepgram',
         status: 'completed',
         endedAt: new Date().toISOString()
       }).catch((error) => logger.error({ error }, 'Failed to close call'));
@@ -152,6 +259,7 @@ wss.on('connection', (ws) => {
     sessions.delete(activeCallSid);
     await upsertCall({
       twilioCallSid: activeCallSid,
+      provider: 'deepgram',
       status: 'completed',
       endedAt: new Date().toISOString()
     }).catch(() => undefined);

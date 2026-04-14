@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { OpsShell } from '../../components/OpsShell';
+import { formatConversationProvider, normalizeConversationProvider } from '../../lib/conversationProvider';
 import { hasSupabaseConfig, supabase } from '../../lib/supabase';
 
 type Call = {
   id: string;
   twilio_call_sid: string;
+  provider?: string | null;
   from_number: string | null;
   to_number: string | null;
   status: string;
@@ -50,7 +52,7 @@ export default function CallsPage() {
     const load = async () => {
       const { data } = await client
         .from('calls')
-        .select('id,twilio_call_sid,from_number,to_number,status,started_at,ended_at,summary')
+        .select('id,twilio_call_sid,provider,from_number,to_number,status,started_at,ended_at,summary')
         .order('created_at', { ascending: false })
         .limit(200);
 
@@ -232,7 +234,7 @@ export default function CallsPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Restaurant Ops</p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">Live Calls</h1>
-            <p className="mt-1 text-sm text-slate-600 sm:text-base">Track call status and call history from Twilio streams</p>
+            <p className="mt-1 text-sm text-slate-600 sm:text-base">Track call status and call history across Deepgram and ElevenLabs conversations</p>
           </div>
         </div>
         {!hasSupabaseConfig ? (
@@ -262,7 +264,10 @@ export default function CallsPage() {
                   <p className="font-medium text-slate-800">
                     {displayFrom(call.from_number, call.twilio_call_sid)} {'->'} {displayTo(call.to_number)}
                   </p>
-                  <StatusChip status={call.status} />
+                  <div className="flex items-center gap-2">
+                    <ProviderChip provider={call.provider} />
+                    <StatusChip status={call.status} />
+                  </div>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">SID: {call.twilio_call_sid}</p>
                 <p className="mt-1 text-xs text-slate-500">Started: {formatPretty(call.started_at)} | Ended: {formatPretty(call.ended_at)}</p>
@@ -320,6 +325,20 @@ function StatusChip({ status }: { status: string }) {
       : 'bg-slate-100 text-slate-700';
 
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>{status}</span>;
+}
+
+function ProviderChip({ provider }: { provider?: string | null }) {
+  const normalized = normalizeConversationProvider(provider);
+  const cls =
+    normalized === 'elevenlabs'
+      ? 'bg-violet-100 text-violet-800'
+      : 'bg-slate-100 text-slate-700';
+
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>
+      {formatConversationProvider(provider)}
+    </span>
+  );
 }
 
 function format(v: string | null) {

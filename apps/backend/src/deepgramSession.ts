@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { z } from 'zod';
+import type { ConversationProvider } from './callProvider.js';
 import { env } from './config.js';
 import { logger } from './logger.js';
 import {
@@ -51,6 +52,7 @@ const reservationToolSchema = z.object({
 });
 
 export class DeepgramCallSession {
+  private readonly provider: ConversationProvider = 'deepgram';
   private readonly twilioWs: WebSocket;
   private readonly twilioCallSid: string;
   private readonly streamSid: string;
@@ -266,6 +268,7 @@ export class DeepgramCallSession {
 
       await insertEvent({
         twilioCallSid: this.twilioCallSid,
+        provider: this.provider,
         eventType: `deepgram.${kind}`,
         payload: evt as Record<string, unknown>
       }).catch(() => undefined);
@@ -389,6 +392,7 @@ export class DeepgramCallSession {
       const structuredOutput: StructuredCallOutcome = {
         schema_version: '1.0',
         twilio_call_sid: this.twilioCallSid,
+        provider: this.provider,
         customer: {
           name: payload.customer_name,
           has_actual_name: true,
@@ -410,11 +414,13 @@ export class DeepgramCallSession {
       };
       await upsertStructuredOutput({
         twilioCallSid: this.twilioCallSid,
+        provider: this.provider,
         source: 'model_tool',
         payload: structuredOutput
       }).catch((err) => logger.error({ err, callSid: this.twilioCallSid }, 'Failed to upsert structured order output'));
       await insertEvent({
         twilioCallSid: this.twilioCallSid,
+        provider: this.provider,
         eventType: 'structured_output',
         payload: structuredOutput as Record<string, unknown>
       }).catch(() => undefined);
@@ -439,6 +445,7 @@ export class DeepgramCallSession {
       const structuredOutput: StructuredCallOutcome = {
         schema_version: '1.0',
         twilio_call_sid: this.twilioCallSid,
+        provider: this.provider,
         customer: {
           name: payload.guest_name,
           has_actual_name: true,
@@ -460,6 +467,7 @@ export class DeepgramCallSession {
       };
       await upsertStructuredOutput({
         twilioCallSid: this.twilioCallSid,
+        provider: this.provider,
         source: 'model_tool',
         payload: structuredOutput
       }).catch((err) =>
@@ -467,6 +475,7 @@ export class DeepgramCallSession {
       );
       await insertEvent({
         twilioCallSid: this.twilioCallSid,
+        provider: this.provider,
         eventType: 'structured_output',
         payload: structuredOutput as Record<string, unknown>
       }).catch(() => undefined);

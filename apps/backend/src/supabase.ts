@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { normalizeConversationProvider, type ConversationProvider } from './callProvider.js';
 import { env } from './config.js';
 import { logger } from './logger.js';
 
@@ -10,6 +11,7 @@ export type CallStatus = 'ringing' | 'in_progress' | 'completed' | 'failed';
 
 export async function upsertCall(params: {
   twilioCallSid: string;
+  provider?: ConversationProvider;
   fromNumber?: string;
   toNumber?: string;
   status: CallStatus;
@@ -18,12 +20,13 @@ export async function upsertCall(params: {
 }) {
   const { data: existing } = await supabase
     .from('calls')
-    .select('from_number,to_number,started_at,ended_at')
+    .select('from_number,to_number,started_at,ended_at,provider')
     .eq('twilio_call_sid', params.twilioCallSid)
     .maybeSingle();
 
   const payload = {
     twilio_call_sid: params.twilioCallSid,
+    provider: normalizeConversationProvider(params.provider ?? existing?.provider),
     from_number: params.fromNumber ?? existing?.from_number ?? null,
     to_number: params.toNumber ?? existing?.to_number ?? null,
     status: params.status,
@@ -94,8 +97,51 @@ export async function insertMessage(params: {
   );
 }
 
+export async function replaceMessages(params: {
+  twilioCallSid: string;
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; text: string }>;
+}) {
+  let { data: callRow, error: callError } = await supabase
+    .from('calls')
+    .select('id')
+    .eq('twilio_call_sid', params.twilioCallSid)
+    .maybeSingle();
+
+  if (!callRow) {
+    await upsertCall({
+      twilioCallSid: params.twilioCallSid,
+      status: 'in_progress'
+    });
+    const retry = await supabase
+      .from('calls')
+      .select('id')
+      .eq('twilio_call_sid', params.twilioCallSid)
+      .maybeSingle();
+    callRow = retry.data ?? null;
+    callError = retry.error;
+  }
+
+  if (callError || !callRow) throw callError ?? new Error('Call row not found');
+
+  const { error: deleteError } = await supabase.from('call_messages').delete().eq('call_id', callRow.id);
+  if (deleteError) throw deleteError;
+
+  if (params.messages.length === 0) return;
+
+  const { error: insertError } = await supabase.from('call_messages').insert(
+    params.messages.map((message) => ({
+      call_id: callRow.id,
+      role: message.role,
+      text: message.text,
+      confidence: null
+    }))
+  );
+  if (insertError) throw insertError;
+}
+
 export async function insertEvent(params: {
   twilioCallSid: string;
+  provider?: ConversationProvider;
   eventType: string;
   payload: Record<string, unknown>;
 }) {
@@ -128,7 +174,10 @@ export async function insertEvent(params: {
   await supabase.from('call_events').insert({
     call_id: callRow.id,
     event_type: params.eventType,
-    payload: params.payload
+    payload: {
+      provider: normalizeConversationProvider(params.provider),
+      ...params.payload
+    }
   });
   logger.debug(
     { callSid: params.twilioCallSid, callId: callRow.id, eventType: params.eventType },
@@ -200,6 +249,7 @@ export async function createReservation(params: {
 
 export async function upsertStructuredOutput(params: {
   twilioCallSid: string;
+  provider?: ConversationProvider;
   source: 'model_tool' | 'transcript_fallback';
   parseStatus?: 'ok' | 'failed';
   payload: StructuredCallOutcome;
@@ -295,7 +345,7 @@ export async function reconcileStaleInProgressCalls(staleAfterMinutes = 3) {
 export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: string) {
   const { data: callRow } = await supabase
     .from('calls')
-    .select('id,from_number')
+    .select('id,from_number,provider')
     .eq('twilio_call_sid', twilioCallSid)
     .maybeSingle();
 
@@ -332,6 +382,7 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
     const { data: menuRows } = await supabase.from('menu_items').select('id,name,price_cents').eq('active', true);
     structured = buildStructuredCallOutcome({
       twilioCallSid,
+      provider: normalizeConversationProvider(callRow.provider),
       fromNumber: callRow.from_number,
       transcript,
       userTranscript,
@@ -341,11 +392,13 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
     });
     await upsertStructuredOutput({
       twilioCallSid,
+      provider: normalizeConversationProvider(callRow.provider),
       source: 'transcript_fallback',
       payload: structured
     }).catch((error) => logger.error({ error, twilioCallSid }, 'Failed to upsert structured fallback output'));
     await insertEvent({
       twilioCallSid,
+      provider: normalizeConversationProvider(callRow.provider),
       eventType: 'structured_output',
       payload: structured as unknown as Record<string, unknown>
     }).catch(() => undefined);
@@ -372,6 +425,7 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
 export type StructuredCallOutcome = {
   schema_version: '1.0';
   twilio_call_sid: string;
+  provider: ConversationProvider;
   customer: {
     name: string;
     has_actual_name: boolean;
@@ -460,13 +514,14 @@ export async function materializeFromStructuredOutput(
 
 function buildStructuredCallOutcome(params: {
   twilioCallSid: string;
+  provider: ConversationProvider;
   fromNumber: string | null;
   transcript: string;
   userTranscript: string;
   assistantTranscript: string;
   menuRows: Array<{ id: string; name: string; price_cents: number }>;
 }): StructuredCallOutcome {
-  const { twilioCallSid, fromNumber, transcript, userTranscript, assistantTranscript, menuRows } = params;
+  const { twilioCallSid, provider, fromNumber, transcript, userTranscript, assistantTranscript, menuRows } = params;
   const normalizedUser = userTranscript.replace(/[,\n]+/g, ' ');
   const nameMatch =
     normalizedUser.match(/my name is\s+(?:like\s+)?([a-z]+(?:\s+[a-z]+){0,2})/i) ??
@@ -533,6 +588,7 @@ function buildStructuredCallOutcome(params: {
   return {
     schema_version: '1.0',
     twilio_call_sid: twilioCallSid,
+    provider,
     customer: {
       name: customerName,
       has_actual_name: hasActualName,

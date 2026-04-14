@@ -12,6 +12,9 @@ const envSchema = z.object({
     .string()
     .url()
     .default('wss://agent.deepgram.com/v1/agent/converse'),
+  ELEVENLABS_AGENT_ID: z.string().optional(),
+  ELEVENLABS_API_KEY: z.string().optional(),
+  ELEVENLABS_WEBHOOK_SECRET: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),

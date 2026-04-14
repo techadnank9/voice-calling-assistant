@@ -3,6 +3,7 @@ create extension if not exists pgcrypto;
 create table if not exists calls (
   id uuid primary key default gen_random_uuid(),
   twilio_call_sid text unique not null,
+  provider text not null default 'deepgram',
   from_number text,
   to_number text,
   status text not null default 'ringing',
@@ -12,6 +13,8 @@ create table if not exists calls (
   summary text,
   created_at timestamptz not null default now()
 );
+
+alter table calls add column if not exists provider text not null default 'deepgram';
 
 create table if not exists call_messages (
   id uuid primary key default gen_random_uuid(),

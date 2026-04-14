@@ -20,6 +20,12 @@ services:
         sync: false
       - key: DEEPGRAM_AGENT_WS_URL
         value: wss://agent.deepgram.com/v1/agent/converse
+      - key: ELEVENLABS_AGENT_ID
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_WEBHOOK_SECRET
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
