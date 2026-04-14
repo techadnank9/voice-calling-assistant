@@ -70,10 +70,9 @@ export default function LandingPage() {
                     Start dashboard
                   </Link>
                 </div>
-                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   <MiniStat label="Availability" value="24/7" />
                   <MiniStat label="Capture" value="Orders + reservations" />
-                  <MiniStat label="Stack" value="Twilio + Deepgram" />
                 </div>
               </div>
 
