@@ -19,7 +19,9 @@ import {
   persistFallbackOrderAndReservationFromCall,
   reconcileStaleInProgressCalls,
   replaceMessages,
-  upsertCall
+  upsertCall,
+  notifyUserActivity,
+  closeCall
 } from './supabase.js';
 
 const app = express();
@@ -126,9 +128,18 @@ app.post('/elevenlabs/voice', async (req, res) => {
       messages: transcriptMessages
     }).catch((error) => logger.error({ error, conversationId }, 'Failed to replace ElevenLabs transcript turns'));
 
+    if (transcriptMessages.some((msg) => msg.role === 'user')) {
+      notifyUserActivity(conversationId);
+    }
+
     await persistFallbackOrderAndReservationFromCall(conversationId).catch((error) =>
       logger.error({ error, conversationId }, 'Failed to persist ElevenLabs fallback order/reservation')
     );
+    await closeCall({
+      twilioCallSid: conversationId,
+      reason: 'order_completed',
+      summary: 'Thanks for calling New Delhi Restaurant! Your order is confirmed.'
+    }).catch(() => undefined);
   }
 
   if (event.type === 'call_initiation_failure') {

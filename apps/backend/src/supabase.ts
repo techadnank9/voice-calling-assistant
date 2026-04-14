@@ -7,6 +7,8 @@ export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE
   auth: { persistSession: false }
 });
 
+const silenceTimers = new Map<string, NodeJS.Timeout>();
+
 export type CallStatus = 'ringing' | 'in_progress' | 'completed' | 'failed';
 
 export async function upsertCall(params: {
@@ -138,6 +140,45 @@ export async function replaceMessages(params: {
     }))
   );
   if (insertError) throw insertError;
+}
+
+function clearSilenceTimer(twilioCallSid: string) {
+  const timer = silenceTimers.get(twilioCallSid);
+  if (timer) {
+    clearTimeout(timer);
+    silenceTimers.delete(twilioCallSid);
+  }
+}
+
+export function notifyUserActivity(twilioCallSid: string) {
+  clearSilenceTimer(twilioCallSid);
+  const timer = setTimeout(() => {
+    void closeCall({ twilioCallSid, reason: 'no_response', summary: 'Call ended due to silence.' });
+  }, 15_000);
+  silenceTimers.set(twilioCallSid, timer);
+}
+
+export async function closeCall(params: { twilioCallSid: string; reason: string; summary?: string }) {
+  clearSilenceTimer(params.twilioCallSid);
+  const { data: callRow } = await supabase
+    .from('calls')
+    .select('id,status')
+    .eq('twilio_call_sid', params.twilioCallSid)
+    .maybeSingle();
+  if (!callRow || callRow.status === 'completed') return;
+  const updates: Record<string, unknown> = { status: 'completed' };
+  if (params.summary) updates.summary = params.summary;
+  await supabase.from('calls').update(updates).eq('twilio_call_sid', params.twilioCallSid);
+  if (callRow.id) {
+    await supabase.from('call_events').insert({
+      call_id: callRow.id,
+      event_type: 'call.close',
+      payload: {
+        reason: params.reason,
+        closing_message: params.summary ?? 'Call completed.'
+      }
+    });
+  }
 }
 
 export async function insertEvent(params: {
