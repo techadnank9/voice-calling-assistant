@@ -2,6 +2,12 @@ import { createClient } from '@supabase/supabase-js';
 import { normalizeConversationProvider, type ConversationProvider } from './callProvider.js';
 import { env } from './config.js';
 import { logger } from './logger.js';
+import {
+  extractConfirmedMenuItems,
+  extractCustomerName,
+  extractFinalReadbackSection,
+  extractTotalCentsFromAssistantTranscript
+} from './orderExtraction.js';
 
 export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false }
@@ -576,31 +582,9 @@ function buildStructuredCallOutcome(params: {
   menuRows: Array<{ id: string; name: string; price_cents: number }>;
 }): StructuredCallOutcome {
   const { twilioCallSid, provider, fromNumber, transcript, userTranscript, assistantTranscript, menuRows } = params;
-  const normalizedUser = userTranscript.replace(/[,\n]+/g, ' ');
   const inferredPhone = extractCallerPhone(userTranscript) ?? extractCallerPhone(transcript);
   const resolvedCallerPhone = fromNumber ?? inferredPhone;
-  const nameMatch =
-    normalizedUser.match(/my name is\s+(?:like\s+)?([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-    normalizedUser.match(/name\s+is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-    normalizedUser.match(/this is\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-    normalizedUser.match(/it(?:\s|')?s\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-    normalizedUser.match(/([a-z]+(?:\s+[a-z]+){0,2})\s+speaking/i) ??
-    normalizedUser.match(/i(?:\s|')?m\s+([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-    normalizedUser.match(/under\s+(?:the\s+)?name\s+([a-z]+(?:\s+[a-z]+){0,2})/i);
-
-  let extractedName = nameMatch?.[1] ?? null;
-  if (!extractedName) {
-    const assistantName =
-      assistantTranscript.match(/thank you,\s*(mr\.|mrs\.|ms\.)?\s*([a-z]+(?:\s+[a-z]+){0,2})/i) ??
-      assistantTranscript.match(/thanks,\s*(mr\.|mrs\.|ms\.)?\s*([a-z]+(?:\s+[a-z]+){0,2})/i);
-    if (assistantName?.[2]) extractedName = assistantName[2];
-  }
-
-  if (!extractedName) {
-    extractedName = extractStandaloneName(userTranscript);
-  }
-
-  const cleanedName = sanitizeExtractedName(extractedName);
+  const cleanedName = extractCustomerName(userTranscript, assistantTranscript);
   const hasActualName = Boolean(cleanedName);
   const fallbackCustomerName = resolvedCallerPhone ? `Caller ${resolvedCallerPhone.replace(/\D/g, '').slice(-4)}` : 'Caller';
   const customerName = hasActualName ? titleCase(cleanedName ?? '') : fallbackCustomerName;
@@ -612,18 +596,15 @@ function buildStructuredCallOutcome(params: {
     .split('\n')
     .filter((line) => line.includes('your order') || line.includes('you ordered') || line.includes('order for'))
     .join(' ');
-  const transcriptForItems = `${userTranscript}\n${assistantOrderSignals}`.toLowerCase();
-
+  const finalReadback = extractFinalReadbackSection(assistantTranscript);
+  const finalReadbackItems = extractConfirmedMenuItems(finalReadback, menuRows);
   const items =
-    menuRows
-      ?.filter((item) => transcriptForItems.includes(item.name.toLowerCase()))
-      .map((item) => ({
-        name: item.name,
-        menuItemId: item.id,
-        qty: 1,
-        lineTotalCents: item.price_cents
-      })) ?? [];
-  const totalCents = items.reduce((sum, item) => sum + item.lineTotalCents, 0);
+    finalReadbackItems.length > 0
+      ? finalReadbackItems
+      : extractConfirmedMenuItems(`${assistantOrderSignals}\n${userTranscript}`, menuRows);
+  const totalCents =
+    extractTotalCentsFromAssistantTranscript(finalReadback || assistantTranscript) ??
+    items.reduce((sum, item) => sum + item.lineTotalCents, 0);
   const indicatesOrder = transcript.includes('order') || items.length > 0;
   const indicatesReservation =
     transcript.includes('reservation') || transcript.includes('reserve') || transcript.includes('table for');
@@ -675,67 +656,6 @@ function buildStructuredCallOutcome(params: {
           : 'escalated'
     }
   };
-}
-
-const GENERIC_NAME_STOPWORDS = new Set([
-  'one',
-  'two',
-  'three',
-  'four',
-  'five',
-  'six',
-  'seven',
-  'eight',
-  'nine',
-  'ten',
-  'the',
-  'a',
-  'an',
-  'of',
-  'customer',
-  'order',
-  'caller',
-  'user',
-  'restaurant',
-  'please',
-  'okay',
-  'ok'
-]);
-
-function extractStandaloneName(text: string): string | null {
-  const lines = text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    const candidate = lines[i];
-    if (!/^[a-zA-Z ]+$/.test(candidate)) continue;
-    const words = candidate.split(' ').filter(Boolean);
-    if (words.length === 0 || words.length > 3) continue;
-    if (containsOnlyGenericWords(words)) continue;
-    return candidate;
-  }
-  return null;
-}
-
-function containsOnlyGenericWords(words: string[]) {
-  if (words.length === 0) return true;
-  return words.every((word) => GENERIC_NAME_STOPWORDS.has(word.toLowerCase()));
-}
-
-function sanitizeExtractedName(name: string | null) {
-  if (!name) return null;
-  const cleaned = name
-    .replace(/[^\p{L}\s'-]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!cleaned) return null;
-  const lowered = cleaned.toLowerCase();
-  if (['fine', 'okay', 'ok', 'yes', 'no', 'name', 'my name', 'customer', 'user', 'caller'].includes(lowered)) return null;
-  const words = cleaned.split(' ').filter(Boolean);
-  if (words.length === 0 || words.length > 3) return null;
-  if (containsOnlyGenericWords(words)) return null;
-  return cleaned;
 }
 
 function titleCase(value: string) {
