@@ -537,7 +537,8 @@ export async function persistFallbackOrderAndReservationFromCall(
   await materializeFromStructuredOutput(
     twilioCallSid,
     callRow.from_number ?? structured.customer.caller_phone ?? null,
-    structured
+    structured,
+    overrideSummary ?? null
   );
 
   const callSummary = [
@@ -587,7 +588,8 @@ export type StructuredCallOutcome = {
 export async function materializeFromStructuredOutput(
   twilioCallSid: string,
   fromNumber: string | null,
-  structured: StructuredCallOutcome
+  structured: StructuredCallOutcome,
+  elevenLabsSummary?: string | null
 ) {
   const tag = `[auto:${twilioCallSid}]`;
   const { data: existingOrder } = await supabase
@@ -605,14 +607,15 @@ export async function materializeFromStructuredOutput(
     .maybeSingle();
 
   if (structured.intents.order && !existingOrder) {
-    const orderSummary = [
+    // Use exact ElevenLabs transcript_summary when available; fall back to generated text.
+    const generatedSummary = [
       `${structured.customer.name} called to place a pickup order.`,
       structured.order.items.length > 0
         ? `Items discussed: ${structured.order.items.map((item) => item.name).join(', ')}.`
         : 'Items were discussed and confirmed on call.',
-      `Pickup time confirmed as ${structured.order.pickup_time}.`,
-      `${tag} auto-captured from transcript`
+      `Pickup time confirmed as ${structured.order.pickup_time}.`
     ].join(' ');
+    const orderSummary = `${elevenLabsSummary?.trim() || generatedSummary} ${tag} auto-captured from transcript`;
     await createOrder({
       callerPhone: fromNumber ?? undefined,
       customerName: structured.customer.name,
