@@ -61,14 +61,33 @@ export function verifyElevenLabsSignature(params: {
   const nowMs = params.nowMs ?? Date.now();
   if (Math.abs(nowMs - timestampMs) > toleranceMs) return false;
 
-  const expected = createHmac('sha256', params.secret)
-    .update(`${parsed.timestamp}.${params.rawBody}`)
-    .digest('hex');
+  const payload = `${parsed.timestamp}.${params.rawBody}`;
+  const candidates: Buffer[] = [];
+  // ElevenLabs/Standard Webhooks: secret stored with wsec_ prefix.
+  // Accept multiple decodings since exact format varies by deployment.
+  if (params.secret.startsWith('wsec_')) {
+    const body = params.secret.slice('wsec_'.length);
+    candidates.push(Buffer.from(body, 'utf8')); // prefix stripped, raw string
+    if (/^[0-9a-fA-F]+$/.test(body) && body.length % 2 === 0) {
+      candidates.push(Buffer.from(body, 'hex'));
+    }
+    try {
+      candidates.push(Buffer.from(body, 'base64'));
+    } catch {
+      // ignore
+    }
+  }
+  // Fallback: full secret string as-is.
+  candidates.push(Buffer.from(params.secret, 'utf8'));
 
-  const expectedBuffer = Buffer.from(expected, 'utf8');
   const receivedBuffer = Buffer.from(parsed.signature, 'utf8');
-  if (expectedBuffer.length !== receivedBuffer.length) return false;
-  return timingSafeEqual(expectedBuffer, receivedBuffer);
+  for (const key of candidates) {
+    const expected = createHmac('sha256', key).update(payload).digest('hex');
+    const expectedBuffer = Buffer.from(expected, 'utf8');
+    if (expectedBuffer.length !== receivedBuffer.length) continue;
+    if (timingSafeEqual(expectedBuffer, receivedBuffer)) return true;
+  }
+  return false;
 }
 
 export function mapElevenLabsTranscriptToMessages(turns: ElevenLabsTranscriptTurn[] | undefined | null) {
