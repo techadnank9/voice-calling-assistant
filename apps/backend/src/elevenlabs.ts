@@ -44,50 +44,82 @@ export function parseElevenLabsSignatureHeader(signatureHeader: string | undefin
   return { timestamp, signature };
 }
 
+export type VerifyResult = {
+  ok: boolean;
+  reason?: 'no_signature' | 'bad_timestamp' | 'stale' | 'mismatch';
+  diagnostics?: {
+    receivedSignature: string;
+    timestamp: string;
+    rawBodyLen: number;
+    secretLen: number;
+    candidates: Array<{ source: string; keyLen: number; computed: string }>;
+  };
+};
+
 export function verifyElevenLabsSignature(params: {
   rawBody: string;
   signatureHeader: string | undefined | null;
   secret: string;
   toleranceMs?: number;
   nowMs?: number;
-}) {
+}): boolean {
+  return verifyElevenLabsSignatureDetailed(params).ok;
+}
+
+export function verifyElevenLabsSignatureDetailed(params: {
+  rawBody: string;
+  signatureHeader: string | undefined | null;
+  secret: string;
+  toleranceMs?: number;
+  nowMs?: number;
+}): VerifyResult {
   const parsed = parseElevenLabsSignatureHeader(params.signatureHeader);
-  if (!parsed) return false;
+  if (!parsed) return { ok: false, reason: 'no_signature' };
 
   const timestampMs = Number(parsed.timestamp) * 1000;
-  if (!Number.isFinite(timestampMs)) return false;
+  if (!Number.isFinite(timestampMs)) return { ok: false, reason: 'bad_timestamp' };
 
   const toleranceMs = params.toleranceMs ?? 5 * 60_000;
   const nowMs = params.nowMs ?? Date.now();
-  if (Math.abs(nowMs - timestampMs) > toleranceMs) return false;
+  if (Math.abs(nowMs - timestampMs) > toleranceMs) return { ok: false, reason: 'stale' };
 
   const payload = `${parsed.timestamp}.${params.rawBody}`;
-  const candidates: Buffer[] = [];
-  // ElevenLabs/Standard Webhooks: secret stored with wsec_ prefix.
-  // Accept multiple decodings since exact format varies by deployment.
+  const candidates: Array<{ source: string; key: Buffer }> = [];
   if (params.secret.startsWith('wsec_')) {
     const body = params.secret.slice('wsec_'.length);
-    candidates.push(Buffer.from(body, 'utf8')); // prefix stripped, raw string
+    candidates.push({ source: 'stripped_utf8', key: Buffer.from(body, 'utf8') });
     if (/^[0-9a-fA-F]+$/.test(body) && body.length % 2 === 0) {
-      candidates.push(Buffer.from(body, 'hex'));
+      candidates.push({ source: 'stripped_hex', key: Buffer.from(body, 'hex') });
     }
     try {
-      candidates.push(Buffer.from(body, 'base64'));
+      candidates.push({ source: 'stripped_base64', key: Buffer.from(body, 'base64') });
     } catch {
       // ignore
     }
   }
-  // Fallback: full secret string as-is.
-  candidates.push(Buffer.from(params.secret, 'utf8'));
+  candidates.push({ source: 'full_utf8', key: Buffer.from(params.secret, 'utf8') });
 
   const receivedBuffer = Buffer.from(parsed.signature, 'utf8');
-  for (const key of candidates) {
-    const expected = createHmac('sha256', key).update(payload).digest('hex');
-    const expectedBuffer = Buffer.from(expected, 'utf8');
-    if (expectedBuffer.length !== receivedBuffer.length) continue;
-    if (timingSafeEqual(expectedBuffer, receivedBuffer)) return true;
+  const tried: Array<{ source: string; keyLen: number; computed: string }> = [];
+  for (const c of candidates) {
+    const computed = createHmac('sha256', c.key).update(payload).digest('hex');
+    tried.push({ source: c.source, keyLen: c.key.length, computed });
+    const expectedBuffer = Buffer.from(computed, 'utf8');
+    if (expectedBuffer.length === receivedBuffer.length && timingSafeEqual(expectedBuffer, receivedBuffer)) {
+      return { ok: true };
+    }
   }
-  return false;
+  return {
+    ok: false,
+    reason: 'mismatch',
+    diagnostics: {
+      receivedSignature: parsed.signature,
+      timestamp: parsed.timestamp,
+      rawBodyLen: params.rawBody.length,
+      secretLen: params.secret.length,
+      candidates: tried
+    }
+  };
 }
 
 export function mapElevenLabsTranscriptToMessages(turns: ElevenLabsTranscriptTurn[] | undefined | null) {

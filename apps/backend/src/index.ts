@@ -8,7 +8,7 @@ import {
   getElevenLabsCallStatus,
   mapElevenLabsTranscriptToMessages,
   matchesConfiguredElevenLabsAgent,
-  verifyElevenLabsSignature,
+  verifyElevenLabsSignatureDetailed,
   type ElevenLabsWebhookEvent
 } from './elevenlabs.js';
 import { env, missingVars } from './config.js';
@@ -155,13 +155,17 @@ app.post('/elevenlabs/voice', async (req, res) => {
   const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {});
 
   if (env.ELEVENLABS_WEBHOOK_SECRET) {
-    const isValid = verifyElevenLabsSignature({
+    const result = verifyElevenLabsSignatureDetailed({
       rawBody,
       signatureHeader: req.header('elevenlabs-signature'),
       secret: env.ELEVENLABS_WEBHOOK_SECRET
     });
 
-    if (!isValid) {
+    if (!result.ok) {
+      logger.warn(
+        { reason: result.reason, diagnostics: result.diagnostics, sigHeader: req.header('elevenlabs-signature') },
+        'ElevenLabs signature verification failed'
+      );
       res.status(401).json({ error: 'Invalid ElevenLabs signature' });
       return;
     }
