@@ -69,7 +69,7 @@ export class DeepgramCallSession {
   }
 
   connect() {
-    this.deepgramWs = new WebSocket(env.DEEPGRAM_AGENT_WS_URL, ['token', env.DEEPGRAM_API_KEY]);
+    this.deepgramWs = new WebSocket(env.DEEPGRAM_AGENT_WS_URL, ['token', env.DEEPGRAM_API_KEY ?? '']);
 
     this.deepgramWs.on('open', () => {
       logger.info({ callSid: this.twilioCallSid, streamSid: this.streamSid }, 'Deepgram websocket opened');

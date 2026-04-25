@@ -60,36 +60,87 @@ const twilioWebhookValidator = (req: Request, res: Response, next: () => void) =
   next();
 };
 
-const statusHtml = (ok: boolean) => {
-  if (ok) {
-    return `<!DOCTYPE html><html><head><title>Ringo Backend</title>
-<style>body{font-family:system-ui,sans-serif;max-width:600px;margin:60px auto;padding:0 20px}
-.badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600}
-.ok{background:#d1fae5;color:#065f46}.err{background:#fee2e2;color:#991b1b}
-ul{margin-top:12px;padding-left:20px}li{margin:6px 0;font-family:monospace;font-size:14px}</style>
+const ENV_VARS: { name: string; required: boolean; secret: boolean; description: string }[] = [
+  { name: 'APP_BASE_URL',              required: true,  secret: false, description: 'Public URL of this backend service' },
+  { name: 'SUPABASE_URL',             required: true,  secret: false, description: 'Supabase project URL' },
+  { name: 'SUPABASE_SERVICE_ROLE_KEY',required: true,  secret: true,  description: 'Supabase service role key' },
+  { name: 'DEEPGRAM_API_KEY',         required: false, secret: true,  description: 'Deepgram API key (optional — only needed for Deepgram calls)' },
+  { name: 'DEEPGRAM_AGENT_WS_URL',    required: false, secret: false, description: 'Deepgram agent WebSocket URL (has default)' },
+  { name: 'ELEVENLABS_AGENT_ID',      required: false, secret: false, description: 'ElevenLabs agent ID (optional integration)' },
+  { name: 'ELEVENLABS_API_KEY',       required: false, secret: true,  description: 'ElevenLabs API key (optional integration)' },
+  { name: 'ELEVENLABS_WEBHOOK_SECRET',required: false, secret: true,  description: 'ElevenLabs webhook signature secret' },
+  { name: 'TWILIO_AUTH_TOKEN',        required: false, secret: true,  description: 'Twilio auth token for webhook validation' },
+  { name: 'PORT',                     required: false, secret: false, description: 'HTTP port (default: 8080)' },
+  { name: 'NODE_ENV',                 required: false, secret: false, description: 'development | production (default: development)' },
+  { name: 'LOG_LEVEL',                required: false, secret: false, description: 'Pino log level (default: info)' },
+];
+
+const statusHtml = () => {
+  const globalOk = missingVars.length === 0;
+  const rows = ENV_VARS.map(({ name, required, secret, description }) => {
+    const raw = process.env[name];
+    const isSet = raw !== undefined && raw !== '';
+    const preview = isSet
+      ? secret
+        ? `<span style="color:#6b7280;font-style:italic">[set — hidden]</span>`
+        : `<code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px">${raw}</code>`
+      : `<span style="color:#dc2626;font-weight:600">not set</span>`;
+    const reqBadge = required
+      ? `<span style="background:#fef3c7;color:#92400e;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600">required</span>`
+      : `<span style="background:#f3f4f6;color:#6b7280;padding:1px 7px;border-radius:999px;font-size:11px">optional</span>`;
+    const rowBg = !isSet && required ? '#fff5f5' : 'transparent';
+    const copyBtn = `<button onclick="copyVar('${name}',this)" style="cursor:pointer;border:1px solid #d1d5db;background:#f9fafb;border-radius:5px;padding:3px 5px;line-height:0;color:#6b7280;margin-right:7px;vertical-align:middle" title="Copy variable name"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`;
+    return `<tr style="background:${rowBg}">
+      <td style="padding:10px 12px;font-family:monospace;font-size:13px;font-weight:600;white-space:nowrap">${copyBtn}${name}</td>
+      <td style="padding:10px 12px">${reqBadge}</td>
+      <td style="padding:10px 8px;font-size:12px;color:#6b7280">${description}</td>
+      <td style="padding:10px 12px;white-space:nowrap">${preview}</td>
+    </tr>`;
+  }).join('');
+
+  const statusBadge = globalOk
+    ? `<span style="display:inline-block;padding:4px 14px;border-radius:999px;font-size:13px;font-weight:600;background:#d1fae5;color:#065f46">● Running</span>`
+    : `<span style="display:inline-block;padding:4px 14px;border-radius:999px;font-size:13px;font-weight:600;background:#fee2e2;color:#991b1b">⚠ Setup Required</span>`;
+
+  const subtitle = globalOk
+    ? `<p style="color:#6b7280;margin:8px 0 24px">All required environment variables are set.</p>`
+    : `<p style="color:#6b7280;margin:8px 0 24px">Add missing variables in Railway → <strong>Variables</strong> tab, then redeploy.</p>`;
+
+  return `<!DOCTYPE html><html><head><title>Ringo Backend</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  *{box-sizing:border-box}
+  body{font-family:system-ui,sans-serif;margin:0;padding:40px 20px;background:#f9fafb;color:#111}
+  .card{background:#fff;border-radius:12px;border:1px solid #e5e7eb;max-width:900px;margin:0 auto;padding:28px 32px}
+  h2{margin:0 0 8px;font-size:22px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  thead th{text-align:left;padding:8px 12px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e5e7eb}
+  tbody tr{border-bottom:1px solid #f3f4f6}
+  tbody tr:last-child{border-bottom:none}
+</style>
+<script>
+var copyIcon='<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+var checkIcon='<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#065f46" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+function copyVar(name,btn){navigator.clipboard.writeText(name).then(()=>{btn.innerHTML=checkIcon;btn.style.borderColor='#6ee7b7';setTimeout(()=>{btn.innerHTML=copyIcon;btn.style.borderColor=''},1500)})}
+</script>
 </head><body>
-<h2>◉ Ringo Backend</h2>
-<span class="badge ok">● Running</span>
-<p>All required environment variables are set.</p>
-</body></html>`;
-  }
-  const rows = missingVars.map((v) => `<li>${v}</li>`).join('');
-  return `<!DOCTYPE html><html><head><title>Ringo Backend — Setup Required</title>
-<style>body{font-family:system-ui,sans-serif;max-width:600px;margin:60px auto;padding:0 20px}
-.badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600}
-.ok{background:#d1fae5;color:#065f46}.err{background:#fee2e2;color:#991b1b}
-ul{margin-top:12px;padding-left:20px}li{margin:6px 0;font-family:monospace;font-size:14px}</style>
-</head><body>
-<h2>◉ Ringo Backend</h2>
-<span class="badge err">⚠ Setup Required</span>
-<p>The following environment variables are missing. Add them in your Railway dashboard under <strong>Variables</strong>, then redeploy.</p>
-<ul>${rows}</ul>
+<div class="card">
+  <h2>◉ Ringo Backend</h2>
+  ${statusBadge}
+  ${subtitle}
+  <table>
+    <thead><tr>
+      <th>Variable</th><th>Type</th><th>Description</th><th>Value</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</div>
 </body></html>`;
 };
 
 app.get('/', (_req, res) => {
   const ok = missingVars.length === 0;
-  res.status(ok ? 200 : 503).type('text/html').send(statusHtml(ok));
+  res.status(ok ? 200 : 503).type('text/html').send(statusHtml());
 });
 
 app.get('/health', (_req, res) => {

@@ -7,7 +7,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(8080),
   APP_BASE_URL: z.string().url(),
-  DEEPGRAM_API_KEY: z.string().min(1),
+  DEEPGRAM_API_KEY: z.string().min(1).optional(),
   DEEPGRAM_AGENT_WS_URL: z
     .string()
     .url()
@@ -35,7 +35,7 @@ export const env: Env = result.success
       NODE_ENV: (process.env.NODE_ENV as 'development') ?? 'development',
       PORT: Number(process.env.PORT) || 8080,
       APP_BASE_URL: process.env.APP_BASE_URL ?? '',
-      DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY ?? '',
+      DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY,
       DEEPGRAM_AGENT_WS_URL:
         process.env.DEEPGRAM_AGENT_WS_URL ?? 'wss://agent.deepgram.com/v1/agent/converse',
       ELEVENLABS_AGENT_ID: process.env.ELEVENLABS_AGENT_ID,
