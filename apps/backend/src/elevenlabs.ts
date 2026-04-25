@@ -21,6 +21,7 @@ export type ElevenLabsWebhookEvent = {
     analysis?: {
       transcript_summary?: string | null;
       call_successful?: string | null;
+      data_collection?: Record<string, { value: unknown; rationale?: string | null }> | null;
     } | null;
     metadata?: {
       start_time_unix_secs?: number;

@@ -392,7 +392,66 @@ export async function reconcileStaleInProgressCalls(staleAfterMinutes = 3) {
   return staleRows.length;
 }
 
-export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: string) {
+export type ElevenLabsDataCollection = Record<string, { value: unknown; rationale?: string | null }>;
+
+function buildStructuredFromDataCollection(params: {
+  twilioCallSid: string;
+  provider: ConversationProvider;
+  fromNumber: string | null;
+  dc: ElevenLabsDataCollection;
+  menuRows: Array<{ id: string; name: string; price_cents: number }>;
+}): StructuredCallOutcome | null {
+  const { twilioCallSid, provider, fromNumber, dc, menuRows } = params;
+
+  const str = (key: string): string =>
+    typeof dc[key]?.value === 'string' ? (dc[key]!.value as string).trim() : '';
+  const num = (key: string): number | null => {
+    const v = dc[key]?.value;
+    return typeof v === 'number' ? v : typeof v === 'string' && v ? Number(v) : null;
+  };
+  const bool = (key: string): boolean => Boolean(dc[key]?.value);
+
+  const customerName = str('customer_name') || (fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller');
+  const hasActualName = Boolean(str('customer_name'));
+  const callerPhone = str('phone_number') || fromNumber;
+  const callType = str('call_type').toLowerCase();
+  const itemsText = str('order_items');
+  const totalFromDc = num('total_amount');
+  const pickupTime = str('pickup_time') || '20 minutes';
+  const partySizeFromDc = num('party_size');
+  const reservationDate = str('reservation_date') || 'today';
+  const reservationTime = str('reservation_time') || '';
+
+  const items = itemsText ? extractConfirmedMenuItems(itemsText, menuRows) : [];
+  const totalCents = totalFromDc != null
+    ? Math.round(totalFromDc * 100)
+    : items.reduce((s, i) => s + i.lineTotalCents, 0);
+
+  const indicatesOrder = callType === 'order' || bool('is_order') || items.length > 0;
+  const indicatesReservation = callType === 'reservation' || bool('is_reservation');
+
+  return {
+    schema_version: '1.0',
+    twilio_call_sid: twilioCallSid,
+    provider,
+    customer: { name: customerName, has_actual_name: hasActualName, caller_phone: callerPhone || null },
+    intents: { order: indicatesOrder, reservation: indicatesReservation },
+    order: { pickup_time: pickupTime, total_cents: totalCents, items },
+    reservation: {
+      party_size: partySizeFromDc ?? 2,
+      date: reservationDate,
+      reservation_time: reservationTime || pickupTime,
+      occasion: str('occasion') || 'Not specified',
+      status: (hasActualName && partySizeFromDc != null && reservationTime) ? 'confirmed' : 'escalated'
+    }
+  };
+}
+
+export async function persistFallbackOrderAndReservationFromCall(
+  twilioCallSid: string,
+  overrideSummary?: string | null,
+  elevenLabsDataCollection?: ElevenLabsDataCollection | null
+) {
   const { data: callRow } = await supabase
     .from('calls')
     .select('id,from_number,provider')
@@ -430,22 +489,35 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
     structured = existingStructured.payload as unknown as StructuredCallOutcome;
   } else {
     const { data: menuRows } = await supabase.from('menu_items').select('id,name,price_cents').eq('active', true);
-    structured = buildStructuredCallOutcome({
+    const safeMenuRows = (menuRows as Array<{ id: string; name: string; price_cents: number }> | null) ?? [];
+
+    const dcStructured = elevenLabsDataCollection
+      ? buildStructuredFromDataCollection({
+          twilioCallSid,
+          provider: normalizeConversationProvider(callRow.provider),
+          fromNumber: callRow.from_number,
+          dc: elevenLabsDataCollection,
+          menuRows: safeMenuRows
+        })
+      : null;
+
+    structured = dcStructured ?? buildStructuredCallOutcome({
       twilioCallSid,
       provider: normalizeConversationProvider(callRow.provider),
       fromNumber: callRow.from_number,
       transcript,
       userTranscript,
       assistantTranscript,
-      menuRows:
-        (menuRows as Array<{ id: string; name: string; price_cents: number }> | null) ?? []
+      menuRows: safeMenuRows
     });
+
+    const source = dcStructured ? 'model_tool' : 'transcript_fallback';
     await upsertStructuredOutput({
       twilioCallSid,
       provider: normalizeConversationProvider(callRow.provider),
-      source: 'transcript_fallback',
+      source,
       payload: structured
-    }).catch((error) => logger.error({ error, twilioCallSid }, 'Failed to upsert structured fallback output'));
+    }).catch((error) => logger.error({ error, twilioCallSid }, 'Failed to upsert structured output'));
     await insertEvent({
       twilioCallSid,
       provider: normalizeConversationProvider(callRow.provider),
@@ -479,8 +551,9 @@ export async function persistFallbackOrderAndReservationFromCall(twilioCallSid: 
     .filter(Boolean)
     .join(' ');
 
-  if (callSummary.trim()) {
-    await supabase.from('calls').update({ summary: callSummary }).eq('id', callRow.id);
+  const finalSummary = overrideSummary?.trim() || callSummary;
+  if (finalSummary.trim()) {
+    await supabase.from('calls').update({ summary: finalSummary }).eq('id', callRow.id);
   }
 }
 
@@ -596,14 +669,19 @@ function buildStructuredCallOutcome(params: {
 
   const assistantOrderSignals = assistantTranscript
     .split('\n')
-    .filter((line) => line.includes('your order') || line.includes('you ordered') || line.includes('order for'))
+    .filter((line) =>
+      line.includes('your order') || line.includes('you ordered') || line.includes('order for') ||
+      line.includes('confirm') || line.includes('summary') || line.includes('total') || line.includes('recap')
+    )
     .join(' ');
   const finalReadback = extractFinalReadbackSection(assistantTranscript);
   const finalReadbackItems = extractConfirmedMenuItems(finalReadback, menuRows);
+  const signalItems = extractConfirmedMenuItems(`${assistantOrderSignals}\n${userTranscript}`, menuRows);
+  const fullItems = extractConfirmedMenuItems(assistantTranscript, menuRows);
   const items =
-    finalReadbackItems.length > 0
-      ? finalReadbackItems
-      : extractConfirmedMenuItems(`${assistantOrderSignals}\n${userTranscript}`, menuRows);
+    finalReadbackItems.length > 0 ? finalReadbackItems :
+    signalItems.length > 0 ? signalItems :
+    fullItems;
   const totalCents =
     extractTotalCentsFromAssistantTranscript(finalReadback || assistantTranscript) ??
     items.reduce((sum, item) => sum + item.lineTotalCents, 0);

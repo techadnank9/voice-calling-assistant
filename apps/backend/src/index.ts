@@ -219,7 +219,9 @@ app.post('/elevenlabs/voice', async (req, res) => {
       notifyUserActivity(conversationId);
     }
 
-    await persistFallbackOrderAndReservationFromCall(conversationId).catch((error) =>
+    const elevenLabsSummary = event.data?.analysis?.transcript_summary ?? null;
+    const elevenLabsDC = event.data?.analysis?.data_collection ?? null;
+    await persistFallbackOrderAndReservationFromCall(conversationId, elevenLabsSummary, elevenLabsDC).catch((error) =>
       logger.error({ error, conversationId }, 'Failed to persist ElevenLabs fallback order/reservation')
     );
     await closeCall({

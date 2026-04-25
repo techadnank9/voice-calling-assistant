@@ -22,7 +22,23 @@ const GENERIC_NAME_STOPWORDS = new Set([
   'restaurant',
   'please',
   'okay',
-  'ok'
+  'ok',
+  'thank',
+  'thanks',
+  'bye',
+  'goodbye',
+  'hello',
+  'hi',
+  'hey',
+  'sure',
+  'right',
+  'correct',
+  'perfect',
+  'great',
+  'good',
+  'yes',
+  'no',
+  'you'
 ]);
 
 export function extractCustomerName(userTranscript: string, assistantTranscript: string) {
@@ -81,8 +97,19 @@ export function extractFinalReadbackSection(assistantTranscript: string) {
   const markers = [
     'let me read back your complete order',
     'let me read back your order',
+    'here is your complete order',
+    "here's your complete order",
+    'here is your order',
+    "here's your order",
+    'to confirm your order',
+    "let me confirm your order",
+    'your complete order is',
     'your order is',
-    'so your order is'
+    'so your order is',
+    'order summary',
+    'to summarize your order',
+    'just to confirm your order',
+    'just to recap'
   ];
 
   let lastIndex = -1;
@@ -143,7 +170,10 @@ function sanitizeExtractedName(name: string | null) {
     .trim();
   if (!cleaned) return null;
   const lowered = cleaned.toLowerCase();
-  if (['fine', 'okay', 'ok', 'yes', 'no', 'name', 'my name', 'customer', 'user', 'caller'].includes(lowered)) return null;
+  if (['fine', 'okay', 'ok', 'yes', 'no', 'name', 'my name', 'customer', 'user', 'caller',
+       'thank you', 'thank', 'thanks', 'bye', 'goodbye', 'hello', 'hi', 'hey',
+       'sure', 'right', 'correct', 'perfect', 'great', 'good', 'hold on',
+       'please', 'sorry', 'excuse me'].includes(lowered)) return null;
   const words = cleaned.split(' ').filter(Boolean);
   if (words.length === 0 || words.length > 3) return null;
   if (containsOnlyGenericWords(words)) return null;
