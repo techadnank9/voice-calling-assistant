@@ -353,7 +353,7 @@ export async function buildMenuGuardPrompt(): Promise<string> {
   const menuLines = data.map((item) => `- ${item.name} ($${(item.price_cents / 100).toFixed(2)})`).join('\n');
 
   return [
-    'Restaurant menu policy for New Delhi Restaurant:',
+    "Restaurant menu policy for Mom's Biryani:",
     'You can only take orders for the exact menu items listed below.',
     'Do not infer or invent items that are not listed.',
     'If caller asks for anything not listed, politely say it is unavailable and suggest listed alternatives.',

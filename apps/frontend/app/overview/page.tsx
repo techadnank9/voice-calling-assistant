@@ -214,11 +214,11 @@ export default function OverviewPage() {
       <header className="border-b border-slate-200 pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">Good afternoon, New Delhi Ops</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">Good afternoon, Mom's Biryani Ops</h1>
             <p className="mt-1 text-sm text-slate-500 sm:text-base">◷ It&apos;s {new Date().toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}</p>
           </div>
           <div className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 sm:w-auto">
-            📍 New Delhi Restaurant{' '}
+            📍 Mom's Biryani{' '}
             <a
               href={backendUrl}
               target="_blank"

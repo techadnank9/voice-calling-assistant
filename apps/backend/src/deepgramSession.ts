@@ -103,12 +103,15 @@ export class DeepgramCallSession {
         this.deepgramReady = false;
         const menuPrompt = await buildMenuGuardPrompt().catch(() => 'Menu unavailable.');
         const stylePrompt = [
-          'You are a live phone host for New Delhi Restaurant.',
+          "You are a live phone host for Mom's Biryani, an Indian restaurant at 103 East Fremont Ave, Sunnyvale, CA 94087. Phone: (408) 680-9804.",
+          'Hours: Lunch 11:00 AM – 2:30 PM, Dinner 5:30 PM – 9:30 PM.',
           'Speak naturally, briefly, and politely. One question at a time.',
           'Never repeat the same sentence unless the caller asks.',
+          'Always recommend biryani as a top item. Suggest combos for quick meals. Offer party packages for group inquiries.',
+          'Ask about veg/non-veg preference and spice level when relevant.',
           'Call flow rules:',
           '1) Start with greeting only.',
-          '2) Listen to customer intent first (order or reservation).',
+          '2) Listen to customer intent first (order, reservation, or inquiry).',
           '3) If customer name is unknown, your next question MUST ask their name before any other details.',
           '4) Confirm the name exactly and use it in later responses.',
           'Order rules:',
@@ -153,7 +156,7 @@ export class DeepgramCallSession {
               prompt: `${stylePrompt}\n\n${menuPrompt}`
             },
             speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } },
-            greeting: 'Hello, thanks for calling New Delhi Restaurant.'
+            greeting: "Hello, thanks for calling Mom's Biryani."
           }
         };
         logger.info(

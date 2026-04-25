@@ -232,9 +232,9 @@ export default function CallsPage() {
       <header className="border-b border-slate-200 pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Restaurant Ops</p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">Live Calls</h1>
-            <p className="mt-1 text-sm text-slate-600 sm:text-base">Track call status and call history across Deepgram and ElevenLabs conversations</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Mom's Biryani</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">Calls</h1>
+            <p className="mt-1 text-sm text-slate-600 sm:text-base">Every inbound call, live status, and full conversation history in one place.</p>
           </div>
         </div>
         {!hasSupabaseConfig ? (

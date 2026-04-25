@@ -33,7 +33,7 @@ test('extractFinalReadbackSection returns the last confirmation block', () => {
   const assistantTranscript = [
     'Would you like anything else?',
     'Let me read back your complete order: Seekh Keebab: $24.00 Garlic Nan: $5.00 Total: $29.00',
-    'Thanks for calling New Delhi Restaurant.'
+    "Thanks for calling Mom's Biryani."
   ].join('\n');
 
   assert.match(extractFinalReadbackSection(assistantTranscript), /Seekh Keebab/);

@@ -138,7 +138,7 @@ app.post('/elevenlabs/voice', async (req, res) => {
     await closeCall({
       twilioCallSid: conversationId,
       reason: 'order_completed',
-      summary: 'Thanks for calling New Delhi Restaurant! Your order is confirmed.'
+      summary: "Thanks for calling Mom's Biryani! Your order is confirmed."
     }).catch(() => undefined);
   }
 

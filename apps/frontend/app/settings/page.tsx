@@ -40,7 +40,7 @@ export default function SettingsPage() {
         <Tile label="Supabase Connection" value={hasSupabaseConfig ? 'Connected' : 'Missing env vars'} />
         <Tile label="Menu Items Loaded" value={String(menuCount)} />
         <Tile label="Calls Captured" value={String(callCount)} />
-        <Tile label="Restaurant" value="New Delhi Restaurant" />
+        <Tile label="Restaurant" value="Mom's Biryani" />
       </section>
     </OpsShell>
   );

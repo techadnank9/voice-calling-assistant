@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
-  title: 'OrderDesk',
+  title: 'Ringo',
   description: 'AI voice operations platform for restaurant calls, orders, and reservations'
 };
 

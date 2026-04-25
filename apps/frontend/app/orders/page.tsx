@@ -52,6 +52,9 @@ export default function HomePage() {
   const [query, setQuery] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [liveConversationSummary, setLiveConversationSummary] = useState<string>('');
+  const [dateFilter, setDateFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'range'>('today');
+  const [rangeFrom, setRangeFrom] = useState('');
+  const [rangeTo, setRangeTo] = useState('');
 
   useEffect(() => {
     const client = supabase;
@@ -140,15 +143,38 @@ export default function HomePage() {
   }, [orders, itemsByOrder]);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return visibleOrders;
+    const now = new Date();
+    let dateFiltered: typeof visibleOrders;
+    if (dateFilter === 'range') {
+      const from = rangeFrom ? new Date(rangeFrom + 'T00:00:00') : null;
+      const to = rangeTo ? new Date(rangeTo + 'T23:59:59') : null;
+      dateFiltered = visibleOrders.filter((o) => {
+        const d = new Date(o.created_at);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+      });
+    } else {
+      const offset = dateFilter === 'yesterday' ? -1 : dateFilter === 'tomorrow' ? 1 : 0;
+      const target = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+      dateFiltered = visibleOrders.filter((o) => {
+        const d = new Date(o.created_at);
+        return (
+          d.getFullYear() === target.getFullYear() &&
+          d.getMonth() === target.getMonth() &&
+          d.getDate() === target.getDate()
+        );
+      });
+    }
+    if (!query.trim()) return dateFiltered;
     const q = query.toLowerCase();
-    return visibleOrders.filter(
+    return dateFiltered.filter(
       (o) =>
         (o.caller_phone ?? '').toLowerCase().includes(q) ||
         o.customer_name.toLowerCase().includes(q) ||
         o.pickup_time.toLowerCase().includes(q)
     );
-  }, [visibleOrders, query]);
+  }, [visibleOrders, query, dateFilter, rangeFrom, rangeTo]);
 
   const selectedOrder = useMemo(
     () => visibleOrders.find((o) => o.id === selectedOrderId) ?? null,
@@ -297,7 +323,7 @@ export default function HomePage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-5xl">Orders</h1>
                   <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 sm:text-[14px]">
-                    📍 New Delhi Restaurant{' '}
+                    📍 Mom's Biryani{' '}
                     <a
                       href={backendUrl}
                       target="_blank"
@@ -320,9 +346,47 @@ export default function HomePage() {
                   className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-[15px] outline-none focus:ring-2 focus:ring-indigo-200"
                 />
 
-                <div className="mt-3 flex items-center gap-2">
-                  <button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[14px] text-slate-700">📋 Orders Only</button>
-                  <button className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[14px] text-slate-700">📅 Date Range</button>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {(['yesterday', 'today', 'tomorrow'] as const).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setDateFilter(d)}
+                      className={`rounded-xl border px-3 py-2 text-[14px] capitalize transition ${
+                        dateFilter === d
+                          ? 'border-indigo-500 bg-indigo-50 font-semibold text-indigo-700'
+                          : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setDateFilter('range')}
+                    className={`rounded-xl border px-3 py-2 text-[14px] transition ${
+                      dateFilter === 'range'
+                        ? 'border-indigo-500 bg-indigo-50 font-semibold text-indigo-700'
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    📅 Date Range
+                  </button>
+                  {dateFilter === 'range' && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={rangeFrom}
+                        onChange={(e) => setRangeFrom(e.target.value)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[14px] text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                      <span className="text-slate-400 text-[14px]">→</span>
+                      <input
+                        type="date"
+                        value={rangeTo}
+                        onChange={(e) => setRangeTo(e.target.value)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[14px] text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">

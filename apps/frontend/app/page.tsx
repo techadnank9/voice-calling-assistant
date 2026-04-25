@@ -21,7 +21,7 @@ export default function LandingPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="text-3xl font-black tracking-tight">◉</span>
-              <span className="text-3xl font-black tracking-tight">OrderDesk</span>
+              <span className="text-3xl font-black tracking-tight">Ringo</span>
             </div>
 
             <nav className="hidden items-center gap-1 text-lg font-semibold text-slate-800 md:flex">
@@ -36,7 +36,7 @@ export default function LandingPage() {
                 Dashboard
               </Link>
               <a
-                href="mailto:demo@orderdesk.ai"
+                href="mailto:demo@ringo.ai"
                 className="rounded-[999px] bg-black px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 sm:px-7 sm:text-base"
               >
                 Schedule a demo
@@ -54,11 +54,11 @@ export default function LandingPage() {
                   Phone calls that sound human and never miss an order
                 </h1>
                 <p className="mt-4 max-w-2xl text-base text-slate-600 sm:text-lg">
-                  OrderDesk answers every call, handles orders and reservations in natural voice, and updates your operations dashboard in real time.
+                  Ringo answers every call, handles orders and reservations in natural voice, and updates your operations dashboard in real time.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   <a
-                    href="mailto:demo@orderdesk.ai"
+                    href="mailto:demo@ringo.ai"
                     className="rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 sm:text-base"
                   >
                     Schedule a demo
@@ -79,9 +79,9 @@ export default function LandingPage() {
               <div className="rounded-[1.5rem] border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-3 shadow-inner sm:p-5">
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white p-4 sm:p-5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-2xl font-bold tracking-tight">Good afternoon, New Delhi Ops</h3>
+                    <h3 className="text-2xl font-bold tracking-tight">Good afternoon, Mom's Biryani Ops</h3>
                     <span className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium">
-                      📍 New Delhi Restaurant{' '}
+                      📍 Mom's Biryani{' '}
                       <a
                         href={backendUrl}
                         target="_blank"
@@ -160,7 +160,7 @@ export default function LandingPage() {
             Get a production-ready AI call flow for orders and reservations with full dashboard visibility.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <a href="mailto:demo@orderdesk.ai" className="rounded-xl bg-white px-6 py-3 font-semibold text-slate-900 hover:bg-slate-100">
+            <a href="mailto:demo@ringo.ai" className="rounded-xl bg-white px-6 py-3 font-semibold text-slate-900 hover:bg-slate-100">
               Schedule a demo
             </a>
             <Link href="/overview" className="rounded-xl border border-slate-600 px-6 py-3 font-semibold text-white hover:bg-slate-900">
@@ -247,7 +247,7 @@ function PriceCard({
         ))}
       </ul>
       <a
-        href="mailto:demo@orderdesk.ai"
+        href="mailto:demo@ringo.ai"
         className={`mt-5 inline-block rounded-xl px-4 py-2 text-sm font-semibold ${featured ? 'bg-white text-slate-900' : 'bg-black text-white'}`}
       >
         Schedule a demo
