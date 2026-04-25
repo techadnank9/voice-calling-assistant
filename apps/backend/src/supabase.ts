@@ -9,9 +9,11 @@ import {
   extractTotalCentsFromAssistantTranscript
 } from './orderExtraction.js';
 
-export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false }
-});
+export const supabase = createClient(
+  env.SUPABASE_URL || 'https://placeholder.supabase.co',
+  env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key',
+  { auth: { persistSession: false } }
+);
 
 const silenceTimers = new Map<string, NodeJS.Timeout>();
 
