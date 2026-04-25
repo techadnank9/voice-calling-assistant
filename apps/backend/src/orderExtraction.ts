@@ -67,18 +67,35 @@ export function extractCustomerName(userTranscript: string, assistantTranscript:
   return sanitizeExtractedName(extractedName);
 }
 
+/** Strip trailing size/portion descriptors so "Mutton Dum Biryani 38Oz" → "Mutton Dum Biryani" */
+function shortName(name: string): string {
+  return name
+    .replace(/\b\d+\s*oz\b/gi, '')
+    .replace(/\b\d+[\/-]\d+\s*(people|persons|ppl)?\b/gi, '')
+    .replace(/\b(people|persons|ppl)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function extractConfirmedMenuItems(sourceText: string, menuRows: MenuRow[]) {
   const haystack = sourceText.toLowerCase();
   const matches: Array<{ start: number; end: number; item: MenuRow }> = [];
 
   for (const item of [...menuRows].sort((a, b) => b.name.length - a.name.length)) {
-    const pattern = new RegExp(`\\b${escapeRegExp(item.name.toLowerCase())}\\b`, 'g');
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(haystack)) !== null) {
-      const start = match.index;
-      const end = start + match[0].length;
-      if (matches.some((existing) => rangesOverlap(existing.start, existing.end, start, end))) continue;
-      matches.push({ start, end, item });
+    // Try full name first, then short name (strips "38Oz", "10-12 People", etc.)
+    const namesToTry = [item.name, shortName(item.name)].filter(
+      (n, i, arr) => n.length > 0 && arr.indexOf(n) === i
+    );
+
+    for (const candidate of namesToTry) {
+      const pattern = new RegExp(`\\b${escapeRegExp(candidate.toLowerCase())}\\b`, 'g');
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(haystack)) !== null) {
+        const start = match.index;
+        const end = start + match[0].length;
+        if (matches.some((existing) => rangesOverlap(existing.start, existing.end, start, end))) continue;
+        matches.push({ start, end, item });
+      }
     }
   }
 

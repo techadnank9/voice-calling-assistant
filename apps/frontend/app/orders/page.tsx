@@ -138,7 +138,8 @@ export default function HomePage() {
   const visibleOrders = useMemo(() => {
     return orders.filter((o) => {
       const itemCount = (itemsByOrder.get(o.id) ?? []).length;
-      return itemCount > 0 || o.total_cents > 0;
+      // Show if items/total captured, OR if order has a real customer name (not fallback)
+      return itemCount > 0 || o.total_cents > 0 || !looksLikeFallbackName(o.customer_name);
     });
   }, [orders, itemsByOrder]);
 
