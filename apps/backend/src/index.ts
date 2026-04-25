@@ -11,7 +11,7 @@ import {
   verifyElevenLabsSignature,
   type ElevenLabsWebhookEvent
 } from './elevenlabs.js';
-import { env } from './config.js';
+import { env, missingVars } from './config.js';
 import { DeepgramCallSession } from './deepgramSession.js';
 import { logger } from './logger.js';
 import {
@@ -60,7 +60,43 @@ const twilioWebhookValidator = (req: Request, res: Response, next: () => void) =
   next();
 };
 
+const statusHtml = (ok: boolean) => {
+  if (ok) {
+    return `<!DOCTYPE html><html><head><title>Ringo Backend</title>
+<style>body{font-family:system-ui,sans-serif;max-width:600px;margin:60px auto;padding:0 20px}
+.badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600}
+.ok{background:#d1fae5;color:#065f46}.err{background:#fee2e2;color:#991b1b}
+ul{margin-top:12px;padding-left:20px}li{margin:6px 0;font-family:monospace;font-size:14px}</style>
+</head><body>
+<h2>◉ Ringo Backend</h2>
+<span class="badge ok">● Running</span>
+<p>All required environment variables are set.</p>
+</body></html>`;
+  }
+  const rows = missingVars.map((v) => `<li>${v}</li>`).join('');
+  return `<!DOCTYPE html><html><head><title>Ringo Backend — Setup Required</title>
+<style>body{font-family:system-ui,sans-serif;max-width:600px;margin:60px auto;padding:0 20px}
+.badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600}
+.ok{background:#d1fae5;color:#065f46}.err{background:#fee2e2;color:#991b1b}
+ul{margin-top:12px;padding-left:20px}li{margin:6px 0;font-family:monospace;font-size:14px}</style>
+</head><body>
+<h2>◉ Ringo Backend</h2>
+<span class="badge err">⚠ Setup Required</span>
+<p>The following environment variables are missing. Add them in your Railway dashboard under <strong>Variables</strong>, then redeploy.</p>
+<ul>${rows}</ul>
+</body></html>`;
+};
+
+app.get('/', (_req, res) => {
+  const ok = missingVars.length === 0;
+  res.status(ok ? 200 : 503).type('text/html').send(statusHtml(ok));
+});
+
 app.get('/health', (_req, res) => {
+  if (missingVars.length > 0) {
+    res.status(503).json({ ok: false, missingVars });
+    return;
+  }
   res.json({ ok: true, service: 'voice-calling-assistant-backend' });
 });
 
