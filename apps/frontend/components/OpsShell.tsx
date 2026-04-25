@@ -41,7 +41,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
           {mobileMenuOpen ? (
             <div className="mt-2 flex flex-wrap gap-2 pb-1">
               <Link
-                href="/overview"
+                href="/moms"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
                   active === 'overview' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
@@ -50,7 +50,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                 Overview
               </Link>
               <Link
-                href="/orders"
+                href="/moms/orders"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
                   active === 'orders' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
@@ -59,7 +59,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                 Orders
               </Link>
               <Link
-                href="/calls"
+                href="/moms/calls"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
                   active === 'calls' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
@@ -68,7 +68,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                 Calls
               </Link>
               <Link
-                href="/reservations"
+                href="/moms/reservations"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
                   active === 'reservations' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
@@ -77,7 +77,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                 Reservations
               </Link>
               <Link
-                href="/reports"
+                href="/moms/reports"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
                   active === 'reports' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
@@ -86,7 +86,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                 Reports
               </Link>
               <Link
-                href="/earnings"
+                href="/moms/earnings"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
                   active === 'earnings' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
@@ -95,7 +95,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                 Earnings
               </Link>
               <Link
-                href="/settings"
+                href="/moms/settings"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
                   active === 'settings' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
@@ -104,7 +104,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                 Settings
               </Link>
               <Link
-                href="/support"
+                href="/moms/support"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
                   active === 'support' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
@@ -121,29 +121,29 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
             <p className="px-2 py-2 text-2xl font-black tracking-tight">◉ Ringo</p>
             <ul className="mt-2 space-y-1 text-[16px] font-medium text-slate-700">
               <li className={`rounded-xl px-3 py-2 ${active === 'overview' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/overview">Overview</Link>
+                <Link href="/moms">Overview</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'orders' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/orders">Orders</Link>
+                <Link href="/moms/orders">Orders</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'calls' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/calls">Calls</Link>
+                <Link href="/moms/calls">Calls</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'reservations' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/reservations">Reservations</Link>
+                <Link href="/moms/reservations">Reservations</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'reports' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/reports">Reports</Link>{' '}
+                <Link href="/moms/reports">Reports</Link>{' '}
                 <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-800">New</span>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'earnings' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/earnings">Earnings</Link>
+                <Link href="/moms/earnings">Earnings</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'settings' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/settings">Settings</Link>
+                <Link href="/moms/settings">Settings</Link>
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'support' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
-                <Link href="/support">Support</Link>
+                <Link href="/moms/support">Support</Link>
               </li>
             </ul>
             <div className="sticky bottom-0 mt-auto bg-white pb-2 pt-3">

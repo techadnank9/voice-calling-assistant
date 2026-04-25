@@ -1,11 +1,13 @@
 import type { NextConfig } from 'next';
 
+const OPS_PAGES = ['orders', 'calls', 'reservations', 'reports', 'earnings', 'settings', 'support'];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  basePath: '/moms',
-  async redirects() {
+  async rewrites() {
     return [
-      { source: '/', destination: '/moms', permanent: false, basePath: false }
+      { source: '/moms', destination: '/overview' },
+      ...OPS_PAGES.map((p) => ({ source: `/moms/${p}`, destination: `/${p}` }))
     ];
   }
 };

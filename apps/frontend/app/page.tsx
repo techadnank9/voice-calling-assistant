@@ -32,7 +32,7 @@ export default function LandingPage() {
             </nav>
 
             <div className="flex items-center gap-2 sm:gap-3">
-              <Link href="/overview" className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+              <Link href="/moms" className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
                 Dashboard
               </Link>
               <a
@@ -64,7 +64,7 @@ export default function LandingPage() {
                     Schedule a demo
                   </a>
                   <Link
-                    href="/overview"
+                    href="/moms"
                     className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-100 sm:text-base"
                   >
                     Start dashboard
@@ -163,7 +163,7 @@ export default function LandingPage() {
             <a href="mailto:demo@ringo.ai" className="rounded-xl bg-white px-6 py-3 font-semibold text-slate-900 hover:bg-slate-100">
               Schedule a demo
             </a>
-            <Link href="/overview" className="rounded-xl border border-slate-600 px-6 py-3 font-semibold text-white hover:bg-slate-900">
+            <Link href="/moms" className="rounded-xl border border-slate-600 px-6 py-3 font-semibold text-white hover:bg-slate-900">
               Open dashboard
             </Link>
           </div>
