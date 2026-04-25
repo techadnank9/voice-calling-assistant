@@ -400,8 +400,10 @@ function buildStructuredFromDataCollection(params: {
   fromNumber: string | null;
   dc: ElevenLabsDataCollection;
   menuRows: Array<{ id: string; name: string; price_cents: number }>;
+  userTranscript?: string;
+  assistantTranscript?: string;
 }): StructuredCallOutcome | null {
-  const { twilioCallSid, provider, fromNumber, dc, menuRows } = params;
+  const { twilioCallSid, provider, fromNumber, dc, menuRows, userTranscript = '', assistantTranscript = '' } = params;
 
   const str = (key: string): string =>
     typeof dc[key]?.value === 'string' ? (dc[key]!.value as string).trim() : '';
@@ -411,8 +413,10 @@ function buildStructuredFromDataCollection(params: {
   };
   const bool = (key: string): boolean => Boolean(dc[key]?.value);
 
-  const customerName = str('customer_name') || (fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller');
-  const hasActualName = Boolean(str('customer_name'));
+  const dcName = str('customer_name');
+  const transcriptName = !dcName ? extractCustomerName(userTranscript, assistantTranscript) : null;
+  const customerName = dcName || (transcriptName ? transcriptName.replace(/\b\w/g, (c) => c.toUpperCase()) : (fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller'));
+  const hasActualName = Boolean(dcName || transcriptName);
   const callerPhone = str('phone_number') || fromNumber;
   const callType = str('call_type').toLowerCase();
   const itemsText = str('order_items');
@@ -497,7 +501,9 @@ export async function persistFallbackOrderAndReservationFromCall(
           provider: normalizeConversationProvider(callRow.provider),
           fromNumber: callRow.from_number,
           dc: elevenLabsDataCollection,
-          menuRows: safeMenuRows
+          menuRows: safeMenuRows,
+          userTranscript,
+          assistantTranscript
         })
       : null;
 
