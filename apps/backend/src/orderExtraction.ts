@@ -41,6 +41,34 @@ const GENERIC_NAME_STOPWORDS = new Set([
   'you'
 ]);
 
+/**
+ * Sequence-aware name extraction: find agent turn that asks for name,
+ * then take the immediately following user reply as the name.
+ * Mirrors the frontend's inferNameFromMessageSequence logic.
+ */
+export function inferNameFromMessages(messages: Array<{ role: string; text: string }>) {
+  for (let i = 1; i < messages.length; i++) {
+    const prev = messages[i - 1]!;
+    const curr = messages[i]!;
+    if (prev.role.toLowerCase() !== 'assistant' && prev.role.toLowerCase() !== 'agent') continue;
+    if (curr.role.toLowerCase() !== 'user') continue;
+    if (!/(name|full name|what should i call you)/i.test(prev.text)) continue;
+
+    const cleaned = curr.text
+      .replace(/[^\p{L}\s'-]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) continue;
+
+    const words = cleaned.split(' ').filter(Boolean);
+    if (words.length < 1 || words.length > 3) continue;
+    if (words.every((w) => /^[\p{L}'-]+$/u.test(w))) {
+      return sanitizeExtractedName(cleaned);
+    }
+  }
+  return null;
+}
+
 export function extractCustomerName(userTranscript: string, assistantTranscript: string) {
   const normalizedUser = userTranscript.replace(/[,\n]+/g, ' ');
   const nameMatch =

@@ -6,7 +6,8 @@ import {
   extractConfirmedMenuItems,
   extractCustomerName,
   extractFinalReadbackSection,
-  extractTotalCentsFromAssistantTranscript
+  extractTotalCentsFromAssistantTranscript,
+  inferNameFromMessages
 } from './orderExtraction.js';
 
 export const supabase = createClient(
@@ -402,8 +403,9 @@ function buildStructuredFromDataCollection(params: {
   menuRows: Array<{ id: string; name: string; price_cents: number }>;
   userTranscript?: string;
   assistantTranscript?: string;
+  messages?: Array<{ role: string; text: string }>;
 }): StructuredCallOutcome | null {
-  const { twilioCallSid, provider, fromNumber, dc, menuRows, userTranscript = '', assistantTranscript = '' } = params;
+  const { twilioCallSid, provider, fromNumber, dc, menuRows, userTranscript = '', assistantTranscript = '', messages = [] } = params;
 
   const str = (key: string): string =>
     typeof dc[key]?.value === 'string' ? (dc[key]!.value as string).trim() : '';
@@ -414,9 +416,14 @@ function buildStructuredFromDataCollection(params: {
   const bool = (key: string): boolean => Boolean(dc[key]?.value);
 
   const dcName = str('customer_name');
-  const transcriptName = !dcName ? extractCustomerName(userTranscript, assistantTranscript) : null;
-  const customerName = dcName || (transcriptName ? transcriptName.replace(/\b\w/g, (c) => c.toUpperCase()) : (fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller'));
-  const hasActualName = Boolean(dcName || transcriptName);
+  // Priority: DC field → sequence inference (most reliable) → regex patterns
+  const sequenceName = !dcName && messages.length > 0 ? inferNameFromMessages(messages) : null;
+  const regexName = !dcName && !sequenceName ? extractCustomerName(userTranscript, assistantTranscript) : null;
+  const resolvedName = dcName || sequenceName || regexName;
+  const customerName = resolvedName
+    ? resolvedName.replace(/\b\w/g, (c) => c.toUpperCase())
+    : fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller';
+  const hasActualName = Boolean(resolvedName);
   const callerPhone = str('phone_number') || fromNumber;
   const callType = str('call_type').toLowerCase();
   const itemsText = str('order_items');
@@ -503,7 +510,8 @@ export async function persistFallbackOrderAndReservationFromCall(
           dc: elevenLabsDataCollection,
           menuRows: safeMenuRows,
           userTranscript,
-          assistantTranscript
+          assistantTranscript,
+          messages: transcriptRows ?? []
         })
       : null;
 
