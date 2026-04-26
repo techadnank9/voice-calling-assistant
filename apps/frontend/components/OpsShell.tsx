@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { getBackendBaseUrl, getBackendLinkLabel } from '../lib/backend-link';
+import { RingoLogo } from './RingoLogo';
 
 type PageKey = 'overview' | 'orders' | 'calls' | 'reservations';
 type ExtendedPageKey = PageKey | 'reports' | 'earnings' | 'settings' | 'support';
@@ -18,7 +19,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
       <div className="mx-auto max-w-[1520px]">
         <div className="mb-2 rounded-xl border border-slate-200 bg-white px-3 py-2 lg:hidden">
           <div className="flex items-center justify-between">
-            <p className="text-lg font-black tracking-tight text-slate-900">◉ Ringo</p>
+            <RingoLogo size="sm" variant="light" />
             <div className="flex items-center gap-2">
               <a
                 href={backendUrl}
@@ -118,7 +119,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
 
         <div className="grid gap-0 lg:grid-cols-[230px_1fr] lg:items-start">
           <aside className="hidden border-r border-slate-200 bg-white px-3 pt-3 pb-3 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:overflow-y-auto">
-            <p className="px-2 py-2 text-2xl font-black tracking-tight">◉ Ringo</p>
+            <div className="px-2 py-2"><RingoLogo size="md" variant="light" /></div>
             <ul className="mt-2 space-y-1 text-[16px] font-medium text-slate-700">
               <li className={`rounded-xl px-3 py-2 ${active === 'overview' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
                 <Link href="/moms">Overview</Link>

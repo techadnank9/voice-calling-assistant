@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getBackendBaseUrl, getBackendLinkLabel } from '../lib/backend-link';
+import { RingoLogo } from '../components/RingoLogo';
 
 const backendUrl = getBackendBaseUrl(process.env.NEXT_PUBLIC_BACKEND_BASE_URL);
 const backendLabel = getBackendLinkLabel();
@@ -20,8 +21,7 @@ export default function LandingPage() {
         <header className="sticky top-3 z-30 rounded-[2rem] border border-slate-200 bg-white/95 px-4 py-3 shadow-[0_2px_10px_rgba(2,6,23,0.08)] backdrop-blur sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-3xl font-black tracking-tight">◉</span>
-              <span className="text-3xl font-black tracking-tight">Ringo</span>
+              <RingoLogo size="md" variant="light" />
             </div>
 
             <nav className="hidden items-center gap-1 text-lg font-semibold text-slate-800 md:flex">
