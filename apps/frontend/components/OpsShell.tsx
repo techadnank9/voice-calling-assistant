@@ -154,7 +154,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
                   M
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-900">REDACTED_EMAIL</p>
+                  <p className="truncate text-sm font-semibold text-slate-900">order@momsbiryanica.com</p>
                   <p className="truncate text-xs text-slate-500">Mom&apos;s Biryani</p>
                 </div>
                 <LogoutButton />
