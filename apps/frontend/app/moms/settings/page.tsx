@@ -38,6 +38,8 @@ export default function SettingsPage() {
 
       <RestaurantPhoneSection />
 
+      <TestSmsSection />
+
       <section className="mt-6">
         <h2 className="text-lg font-bold tracking-tight text-slate-900">System Status</h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
@@ -129,6 +131,95 @@ function RestaurantPhoneSection() {
             Clear
           </button>
         )}
+      </div>
+
+      {message && (
+        <p
+          className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+            message.kind === 'success'
+              ? 'bg-emerald-50 text-emerald-800'
+              : 'bg-red-50 text-red-700'
+          }`}
+        >
+          {message.text}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function TestSmsSection() {
+  const [to, setTo] = useState('+1');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  // Pre-fill phone from saved restaurant number
+  useEffect(() => {
+    fetch('/api/settings/restaurant-phone')
+      .then((r) => r.json())
+      .then((d) => { if (d.phone) setTo(d.phone); })
+      .catch(() => {});
+  }, []);
+
+  async function handleSend() {
+    setSending(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/settings/test-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, body: body.trim() || undefined })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage({ kind: 'error', text: data.error ?? 'Failed to send.' });
+        return;
+      }
+      setMessage({ kind: 'success', text: `Sent! SID: ${data.sid}` });
+    } catch {
+      setMessage({ kind: 'error', text: 'Network error. Try again.' });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const canSend = !sending && to.length > 3 && to !== '+1';
+
+  return (
+    <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
+      <h2 className="text-lg font-bold tracking-tight text-slate-900">Send Test SMS</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        Verify Twilio is configured correctly by sending a message to any number.
+      </p>
+
+      <div className="mt-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="tel"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            disabled={sending}
+            placeholder="+14086809804"
+            className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono outline-none focus:border-cyan-500 disabled:bg-slate-50 disabled:text-slate-400"
+          />
+        </div>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          disabled={sending}
+          placeholder="Message text (leave blank for default test message)"
+          rows={3}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-500 disabled:bg-slate-50 disabled:text-slate-400 resize-none"
+        />
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!canSend}
+          className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600 disabled:bg-slate-300 disabled:text-slate-500"
+        >
+          {sending ? 'Sending…' : 'Send Test'}
+        </button>
       </div>
 
       {message && (
