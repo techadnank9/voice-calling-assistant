@@ -63,9 +63,6 @@ export default function LoginPage() {
           style={{ borderColor: 'rgba(255,255,255,0.1)', background: '#111' }}
         >
           <h1 className="text-xl font-bold text-white">Sign in to dashboard</h1>
-          <p className="mt-1 text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
-            Mom&apos;s Biryani operations portal
-          </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
@@ -83,7 +80,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="REDACTED_EMAIL"
+                placeholder="Email address"
                 className="w-full rounded-xl border px-4 py-2.5 text-sm text-white outline-none transition focus:border-[#c0533a] placeholder:text-white/20"
                 style={{
                   background: 'rgba(255,255,255,0.05)',
@@ -107,7 +104,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
+                placeholder="Password"
                 className="w-full rounded-xl border px-4 py-2.5 text-sm text-white outline-none transition focus:border-[#c0533a] placeholder:text-white/20"
                 style={{
                   background: 'rgba(255,255,255,0.05)',
