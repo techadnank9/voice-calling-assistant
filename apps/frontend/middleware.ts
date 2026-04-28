@@ -11,13 +11,13 @@ function isProtected(pathname: string) {
   return INTERNAL_OPS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (!isProtected(pathname)) return NextResponse.next();
 
   const token = request.cookies.get('ringo_session')?.value;
-  if (token && token === makeSessionToken()) return NextResponse.next();
+  if (token && token === await makeSessionToken()) return NextResponse.next();
 
   const loginUrl = new URL('/login', request.url);
   loginUrl.searchParams.set('from', pathname);

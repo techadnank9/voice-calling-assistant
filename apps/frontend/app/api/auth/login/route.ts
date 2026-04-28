@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   }
 
   const cookieStore = await cookies();
-  cookieStore.set('ringo_session', makeSessionToken(), {
+  cookieStore.set('ringo_session', await makeSessionToken(), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
