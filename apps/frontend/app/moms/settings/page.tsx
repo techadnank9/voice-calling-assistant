@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { OpsShell } from '../../components/OpsShell';
-import { hasSupabaseConfig, supabase } from '../../lib/supabase';
+import { OpsShell } from '../../../components/OpsShell';
+import { hasSupabaseConfig, supabase } from '../../../lib/supabase';
 
 type MenuItem = { id: string };
 type Call = { id: string };
