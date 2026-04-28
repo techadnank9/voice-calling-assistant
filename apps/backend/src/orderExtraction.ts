@@ -107,7 +107,7 @@ function shortName(name: string): string {
 
 export function extractConfirmedMenuItems(sourceText: string, menuRows: MenuRow[]) {
   const haystack = sourceText.toLowerCase();
-  const matches: Array<{ start: number; end: number; item: MenuRow }> = [];
+  const matches: Array<{ start: number; end: number; item: MenuRow; qty: number }> = [];
 
   for (const item of [...menuRows].sort((a, b) => b.name.length - a.name.length)) {
     // Try full name first, then short name (strips "38Oz", "10-12 People", etc.)
@@ -116,24 +116,51 @@ export function extractConfirmedMenuItems(sourceText: string, menuRows: MenuRow[
     );
 
     for (const candidate of namesToTry) {
-      const pattern = new RegExp(`\\b${escapeRegExp(candidate.toLowerCase())}\\b`, 'g');
+      // Use lookahead/lookbehind instead of \b so items starting/ending with digits
+      // (e.g. "7UP", "Pepsi 2L") still match correctly next to spaces and punctuation.
+      const escaped = escapeRegExp(candidate.toLowerCase());
+      const pattern = new RegExp(`(?<![\\p{L}\\d])${escaped}(?![\\p{L}\\d])`, 'gu');
       let match: RegExpExecArray | null;
       while ((match = pattern.exec(haystack)) !== null) {
         const start = match.index;
         const end = start + match[0].length;
         if (matches.some((existing) => rangesOverlap(existing.start, existing.end, start, end))) continue;
-        matches.push({ start, end, item });
+
+        // Look for a quantity immediately before the item name: "2 ", "2x ", "two "
+        const prefix = haystack.slice(Math.max(0, start - 12), start).trim();
+        const numericQty = prefix.match(/(\d+)\s*x?\s*$/);
+        const wordQty = prefix.match(/\b(two|three|four|five|six|seven|eight|nine|ten)\s*$/i);
+        const wordQtyMap: Record<string, number> = {
+          two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10
+        };
+        const qty = numericQty
+          ? Math.max(1, parseInt(numericQty[1]!, 10))
+          : wordQty
+            ? (wordQtyMap[wordQty[1]!.toLowerCase()] ?? 1)
+            : 1;
+
+        matches.push({ start, end, item, qty });
       }
     }
   }
 
-  return matches
+  // Deduplicate: if the same menu item appears multiple times (e.g. mentioned when ordering
+  // and again in the readback), keep the occurrence with the highest qty.
+  const byItemId = new Map<string, { start: number; end: number; item: MenuRow; qty: number }>();
+  for (const m of matches) {
+    const existing = byItemId.get(m.item.id);
+    if (!existing || m.qty > existing.qty) {
+      byItemId.set(m.item.id, m);
+    }
+  }
+
+  return [...byItemId.values()]
     .sort((a, b) => a.start - b.start)
-    .map(({ item }) => ({
+    .map(({ item, qty }) => ({
       name: item.name,
       menuItemId: item.id,
-      qty: 1,
-      lineTotalCents: item.price_cents,
+      qty,
+      lineTotalCents: item.price_cents * qty,
       isCustom: false as const
     }));
 }
@@ -203,8 +230,11 @@ export function parseElevenLabsDcItems(
   const segments = dcItemsText.split(',').map((s) => s.trim()).filter(Boolean);
 
   return segments.map((segment) => {
-    // Extract optional "Nx " quantity prefix
-    const qtyMatch = segment.match(/^(\d+)\s*x\s+/i);
+    // Extract optional quantity prefix in formats: "2x Biryani", "2 x Biryani", or "2 Biryani"
+    // Also handle plain numeric prefix "2 Mango Lassi" where the rest is clearly a name.
+    const qtyXMatch = segment.match(/^(\d+)\s*x\s+/i);
+    const qtyPlainMatch = !qtyXMatch ? segment.match(/^(\d+)\s+(?=\S)/) : null;
+    const qtyMatch = qtyXMatch ?? qtyPlainMatch;
     const qty = qtyMatch ? Math.max(1, parseInt(qtyMatch[1]!, 10)) : 1;
     const rawName = qtyMatch ? segment.slice(qtyMatch[0].length).trim() : segment.trim();
 

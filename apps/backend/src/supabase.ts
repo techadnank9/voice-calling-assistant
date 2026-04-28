@@ -505,8 +505,15 @@ export async function persistFallbackOrderAndReservationFromCall(
 
   const existingStructured = await getStructuredOutputByCallSid(twilioCallSid);
   let structured: StructuredCallOutcome;
-  if (existingStructured?.payload) {
-    structured = existingStructured.payload as unknown as StructuredCallOutcome;
+
+  // Always rebuild from ElevenLabs DC when available — it is the most accurate source and
+  // may include items (beverages, desserts) the transcript-based parser missed.
+  // Only reuse cached structured output when DC is absent.
+  const hasFreshDC = elevenLabsDataCollection != null;
+  const hasCachedOutput = existingStructured?.payload != null;
+
+  if (hasCachedOutput && !hasFreshDC) {
+    structured = existingStructured!.payload as unknown as StructuredCallOutcome;
   } else {
     const { data: menuRows } = await supabase.from('menu_items').select('id,name,price_cents').eq('active', true);
     const safeMenuRows = (menuRows as Array<{ id: string; name: string; price_cents: number }> | null) ?? [];
@@ -723,6 +730,39 @@ export async function materializeFromStructuredOutput(
         pickupTime: structured.order.pickup_time
       })
     ]);
+  } else if (structured.intents.order && existingOrder && structured.order.items.length > 0) {
+    // Order already exists (created by real-time Deepgram pass). If it has no items yet,
+    // backfill them from the DC data — this is the common case where beverages/desserts
+    // were mentioned but the transcript parser missed them.
+    const { data: existingItems } = await supabase
+      .from('order_items')
+      .select('id')
+      .eq('order_id', existingOrder.id)
+      .limit(1);
+
+    if (!existingItems?.length) {
+      logger.info({ orderId: existingOrder.id, itemCount: structured.order.items.length }, 'Backfilling order items from DC data');
+      const insertResult = await supabase.from('order_items').insert(
+        structured.order.items.map((item) => ({
+          order_id: existingOrder.id,
+          menu_item_id: item.menuItemId ?? null,
+          custom_name: item.customName ?? (item.isCustom ? item.name : null),
+          qty: item.qty,
+          modifier_json: [],
+          line_total_cents: item.lineTotalCents ?? 0
+        }))
+      );
+      if (insertResult.error) logger.error({ error: insertResult.error }, 'Failed to backfill order items');
+
+      // Update total if DC has a better value
+      if (structured.order.total_cents > 0) {
+        await Promise.resolve(
+          supabase.from('orders')
+            .update({ total_cents: structured.order.total_cents })
+            .eq('id', existingOrder.id)
+        ).catch(() => undefined);
+      }
+    }
   }
 
   if (structured.intents.reservation && !existingReservation) {
