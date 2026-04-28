@@ -9,6 +9,7 @@ import {
   extractTotalCentsFromAssistantTranscript,
   inferNameFromMessages
 } from './orderExtraction.js';
+import { sendCustomerOrderSms, sendRestaurantOrderSms } from './sms.js';
 
 export const supabase = createClient(
   env.SUPABASE_URL || 'https://placeholder.supabase.co',
@@ -642,6 +643,32 @@ export async function materializeFromStructuredOutput(
         lineTotalCents: item.lineTotalCents
       }))
     });
+
+    // Fire-and-forget SMS notifications. Promise.allSettled isolates failures.
+    const { data: settings } = await supabase
+      .from('restaurant_settings')
+      .select('escalation_phone')
+      .limit(1)
+      .maybeSingle();
+
+    const smsItems = structured.order.items.map((i) => ({ name: i.name, qty: i.qty }));
+    await Promise.allSettled([
+      sendCustomerOrderSms({
+        to: fromNumber,
+        customerName: structured.customer.name,
+        items: smsItems,
+        totalCents: structured.order.total_cents,
+        pickupTime: structured.order.pickup_time
+      }),
+      sendRestaurantOrderSms({
+        to: settings?.escalation_phone ?? null,
+        customerName: structured.customer.name,
+        customerPhone: fromNumber,
+        items: smsItems,
+        totalCents: structured.order.total_cents,
+        pickupTime: structured.order.pickup_time
+      })
+    ]);
   }
 
   if (structured.intents.reservation && !existingReservation) {

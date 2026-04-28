@@ -16,6 +16,8 @@ const envSchema = z.object({
   ELEVENLABS_API_KEY: z.string().optional(),
   ELEVENLABS_WEBHOOK_SECRET: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_FROM: z.string().optional(),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   LOG_LEVEL: z.string().default('info')
@@ -42,6 +44,8 @@ export const env: Env = result.success
       ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
       ELEVENLABS_WEBHOOK_SECRET: process.env.ELEVENLABS_WEBHOOK_SECRET,
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
+      TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
+      TWILIO_FROM: process.env.TWILIO_FROM,
       SUPABASE_URL: process.env.SUPABASE_URL ?? '',
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
       LOG_LEVEL: process.env.LOG_LEVEL ?? 'info'
