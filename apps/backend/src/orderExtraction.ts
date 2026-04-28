@@ -133,7 +133,8 @@ export function extractConfirmedMenuItems(sourceText: string, menuRows: MenuRow[
       name: item.name,
       menuItemId: item.id,
       qty: 1,
-      lineTotalCents: item.price_cents
+      lineTotalCents: item.price_cents,
+      isCustom: false as const
     }));
 }
 
@@ -173,6 +174,94 @@ export function extractTotalCentsFromAssistantTranscript(assistantTranscript: st
   const value = Number(matches[matches.length - 1]?.[1]);
   if (!Number.isFinite(value)) return null;
   return Math.round(value * 100);
+}
+
+/** Tokenize a string into lowercase words, stripping punctuation. */
+function tokenizeWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\d\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
+ * Parse the ElevenLabs Data Collection `order_items` string format, e.g.
+ * "1x Gongura Mutton Biryani, 2x Naan, 1x Rose Milk"
+ *
+ * For each item it attempts, in order:
+ *   1. Exact match (case-insensitive) against menu item name or its shortName
+ *   2. Word-overlap fuzzy match (≥2 overlapping words OR ≥50% of DC words present)
+ *   3. Custom fallback (isCustom: true, menuItemId: undefined, lineTotalCents: 0)
+ */
+export function parseElevenLabsDcItems(
+  dcItemsText: string,
+  menuRows: Array<{ id: string; name: string; price_cents: number }>
+): Array<{ name: string; menuItemId?: string; qty: number; lineTotalCents: number; isCustom: boolean }> {
+  if (!dcItemsText || !dcItemsText.trim()) return [];
+
+  const segments = dcItemsText.split(',').map((s) => s.trim()).filter(Boolean);
+
+  return segments.map((segment) => {
+    // Extract optional "Nx " quantity prefix
+    const qtyMatch = segment.match(/^(\d+)\s*x\s+/i);
+    const qty = qtyMatch ? Math.max(1, parseInt(qtyMatch[1]!, 10)) : 1;
+    const rawName = qtyMatch ? segment.slice(qtyMatch[0].length).trim() : segment.trim();
+
+    if (!rawName) {
+      return { name: segment, qty, lineTotalCents: 0, isCustom: true };
+    }
+
+    const rawNameLower = rawName.toLowerCase();
+
+    // --- Pass 1: exact match against full name or shortName (case-insensitive) ---
+    for (const item of menuRows) {
+      if (
+        item.name.toLowerCase() === rawNameLower ||
+        shortName(item.name).toLowerCase() === rawNameLower
+      ) {
+        return {
+          name: item.name,
+          menuItemId: item.id,
+          qty,
+          lineTotalCents: item.price_cents * qty,
+          isCustom: false
+        };
+      }
+    }
+
+    // --- Pass 2: word-overlap fuzzy match ---
+    const dcWords = tokenizeWords(rawName);
+    let bestItem: (typeof menuRows)[number] | null = null;
+    let bestOverlap = 0;
+
+    for (const item of menuRows) {
+      const menuWords = tokenizeWords(item.name);
+      const menuWordSet = new Set(menuWords);
+      const overlap = dcWords.filter((w) => menuWordSet.has(w)).length;
+
+      const isGoodEnough =
+        overlap >= 2 || (dcWords.length > 0 && overlap / dcWords.length >= 0.5);
+
+      if (isGoodEnough && overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestItem = item;
+      }
+    }
+
+    if (bestItem) {
+      return {
+        name: bestItem.name,
+        menuItemId: bestItem.id,
+        qty,
+        lineTotalCents: bestItem.price_cents * qty,
+        isCustom: false
+      };
+    }
+
+    // --- Pass 3: unmatched custom fallback ---
+    return { name: rawName, qty, lineTotalCents: 0, isCustom: true };
+  });
 }
 
 function extractStandaloneName(text: string): string | null {

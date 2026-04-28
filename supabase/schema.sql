@@ -86,11 +86,14 @@ create table if not exists order_items (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references orders(id) on delete cascade,
   menu_item_id uuid references menu_items(id) on delete set null,
+  custom_name text,
   qty int not null,
   modifier_json jsonb not null default '[]'::jsonb,
   line_total_cents int not null default 0,
   created_at timestamptz not null default now()
 );
+
+alter table order_items add column if not exists custom_name text;
 
 create table if not exists reservations (
   id uuid primary key default gen_random_uuid(),
@@ -113,6 +116,9 @@ create table if not exists restaurant_settings (
   escalation_phone text,
   created_at timestamptz not null default now()
 );
+
+alter table restaurant_settings add column if not exists restaurant_phone text;
+alter table restaurant_settings add column if not exists twilio_phone text;
 
 alter publication supabase_realtime add table calls;
 alter publication supabase_realtime add table orders;

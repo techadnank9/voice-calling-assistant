@@ -24,6 +24,7 @@ type OrderItem = {
   order_id: string;
   qty?: number;
   line_total_cents?: number;
+  custom_name?: string | null;
   menu_items?: { name?: string | null } | null;
 };
 
@@ -77,7 +78,7 @@ export default function HomePage() {
 
       const { data: itemsData } = await client
         .from('order_items')
-        .select('id,order_id,qty,line_total_cents,menu_items(name)')
+        .select('id,order_id,qty,line_total_cents,custom_name,menu_items(name)')
         .in('order_id', rows.map((r) => r.id));
 
       setOrderItems((itemsData as OrderItem[]) ?? []);
@@ -427,7 +428,12 @@ export default function HomePage() {
                               <td className="px-3 py-3 text-slate-700">{displayName}</td>
                               <td className="px-3 py-3 text-slate-700">{rowDate}</td>
                               <td className="px-3 py-3 text-slate-700">{rowTime}</td>
-                              <td className="px-3 py-3 text-indigo-600">{count} item{count === 1 ? '' : 's'}</td>
+                              <td className="px-3 py-3 text-indigo-600">
+                                {count} item{count === 1 ? '' : 's'}
+                                {(itemsByOrder.get(order.id) ?? []).some((i) => i.custom_name && !i.menu_items?.name) && (
+                                  <span className="ml-1 text-amber-500" title="Contains custom items">✱</span>
+                                )}
+                              </td>
                               <td className="px-3 py-3 font-bold text-slate-900">${(order.total_cents / 100).toFixed(2)}</td>
                               <td className="px-3 py-3">Pickup</td>
                               <td className="px-3 py-3 text-slate-500">{duration}</td>
@@ -511,9 +517,14 @@ export default function HomePage() {
               <div key={item.id} className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-slate-900">
-                    {item.qty ?? 1}x {item.menu_items?.name ?? 'Menu item'}
+                    {item.qty ?? 1}x {item.menu_items?.name ?? item.custom_name ?? 'Menu item'}
+                    {item.custom_name && !item.menu_items?.name && (
+                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">custom</span>
+                    )}
                   </p>
-                  <p className="font-semibold text-slate-800">${((item.line_total_cents ?? 0) / 100).toFixed(2)}</p>
+                  <p className="font-semibold text-slate-800">
+                    {(item.line_total_cents ?? 0) > 0 ? `$${((item.line_total_cents ?? 0) / 100).toFixed(2)}` : '—'}
+                  </p>
                 </div>
               </div>
             ))}

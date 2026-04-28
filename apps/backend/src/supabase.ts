@@ -7,7 +7,8 @@ import {
   extractCustomerName,
   extractFinalReadbackSection,
   extractTotalCentsFromAssistantTranscript,
-  inferNameFromMessages
+  inferNameFromMessages,
+  parseElevenLabsDcItems
 } from './orderExtraction.js';
 import { sendCustomerOrderSms, sendRestaurantOrderSms } from './sms.js';
 
@@ -245,6 +246,7 @@ export async function createOrder(params: {
   totalCents?: number;
   items: Array<{
     menuItemId?: string;
+    customName?: string;
     qty: number;
     modifierJson?: unknown[];
     lineTotalCents?: number;
@@ -270,6 +272,7 @@ export async function createOrder(params: {
       params.items.map((item) => ({
         order_id: order.id,
         menu_item_id: item.menuItemId ?? null,
+        custom_name: item.customName ?? null,
         qty: item.qty,
         modifier_json: item.modifierJson ?? [],
         line_total_cents: item.lineTotalCents ?? 0
@@ -394,7 +397,12 @@ export async function reconcileStaleInProgressCalls(staleAfterMinutes = 3) {
   return staleRows.length;
 }
 
-export type ElevenLabsDataCollection = Record<string, { value: unknown; rationale?: string | null }>;
+type ElevenLabsDataCollection = Record<string, { value: unknown; rationale?: string | null }>;
+
+function looksLikeFallbackName(name: string) {
+  const lowered = (name ?? '').toLowerCase().trim();
+  return !lowered || lowered.startsWith('caller ') || lowered === 'caller' || lowered.includes('phone customer');
+}
 
 function buildStructuredFromDataCollection(params: {
   twilioCallSid: string;
@@ -434,7 +442,7 @@ function buildStructuredFromDataCollection(params: {
   const reservationDate = str('reservation_date') || 'today';
   const reservationTime = str('reservation_time') || '';
 
-  const items = itemsText ? extractConfirmedMenuItems(itemsText, menuRows) : [];
+  const items = itemsText ? parseElevenLabsDcItems(itemsText, menuRows) : [];
   const totalCents = totalFromDc != null
     ? Math.round(totalFromDc * 100)
     : items.reduce((s, i) => s + i.lineTotalCents, 0);
@@ -541,17 +549,24 @@ export async function persistFallbackOrderAndReservationFromCall(
     }).catch(() => undefined);
   }
 
-  if (!callRow.from_number && structured.customer.caller_phone) {
-    await supabase
-      .from('calls')
-      .update({ from_number: structured.customer.caller_phone })
-      .eq('id', callRow.id);
-    callRow.from_number = structured.customer.caller_phone;
+  // Prefer the phone number explicitly stated by the caller via ElevenLabs data_collection
+  // over the Twilio from_number (which may be a relay/masked number).
+  const dcPhone = structured.customer.caller_phone;
+  if (dcPhone && dcPhone !== callRow.from_number) {
+    await Promise.resolve(
+      supabase.from('calls').update({ from_number: dcPhone }).eq('id', callRow.id)
+    ).catch(() => undefined);
+    callRow.from_number = dcPhone;
+  } else if (!callRow.from_number && dcPhone) {
+    await Promise.resolve(
+      supabase.from('calls').update({ from_number: dcPhone }).eq('id', callRow.id)
+    ).catch(() => undefined);
+    callRow.from_number = dcPhone;
   }
 
   await materializeFromStructuredOutput(
     twilioCallSid,
-    callRow.from_number ?? structured.customer.caller_phone ?? null,
+    callRow.from_number ?? dcPhone ?? null,
     structured,
     overrideSummary ?? null
   );
@@ -589,7 +604,7 @@ export type StructuredCallOutcome = {
   order: {
     pickup_time: string;
     total_cents: number;
-    items: Array<{ name: string; menuItemId?: string; qty: number; lineTotalCents: number }>;
+    items: Array<{ name: string; menuItemId?: string; customName?: string; qty: number; lineTotalCents: number; isCustom?: boolean }>;
   };
   reservation: {
     party_size: number;
@@ -609,7 +624,7 @@ export async function materializeFromStructuredOutput(
   const tag = `[auto:${twilioCallSid}]`;
   const { data: existingOrder } = await supabase
     .from('orders')
-    .select('id')
+    .select('id,customer_name,caller_phone')
     .ilike('notes', `%${tag}%`)
     .limit(1)
     .maybeSingle();
@@ -620,6 +635,44 @@ export async function materializeFromStructuredOutput(
     .ilike('notes', `%${tag}%`)
     .limit(1)
     .maybeSingle();
+
+  // If ElevenLabs data_collection gave us a real name or phone, patch the existing order and call row.
+  const dcPhone = structured.customer.caller_phone;
+  const dcName = structured.customer.has_actual_name ? structured.customer.name : null;
+
+  if (existingOrder && (dcName || dcPhone)) {
+    const patch: Record<string, string> = {};
+    if (dcName && looksLikeFallbackName(existingOrder.customer_name ?? '')) patch.customer_name = dcName;
+    if (dcPhone && !existingOrder.caller_phone) patch.caller_phone = dcPhone;
+    if (Object.keys(patch).length > 0) {
+      await Promise.resolve(
+        supabase.from('orders').update(patch).eq('id', existingOrder.id)
+      ).catch(() => undefined);
+    }
+  }
+
+  // Always sync the best-known phone back onto the calls row so future lookups work.
+  const resolvedPhone = fromNumber || dcPhone || null;
+  if (resolvedPhone) {
+    await Promise.resolve(
+      supabase
+        .from('calls')
+        .update({ from_number: resolvedPhone })
+        .eq('twilio_call_sid', twilioCallSid)
+        .is('from_number', null)
+    ).catch(() => undefined);
+
+    // If DC gave us a phone that differs from Twilio's from_number, prefer the DC value
+    // (ElevenLabs data_collection phone_number is what the caller stated explicitly).
+    if (dcPhone && dcPhone !== fromNumber) {
+      await Promise.resolve(
+        supabase
+          .from('calls')
+          .update({ from_number: dcPhone })
+          .eq('twilio_call_sid', twilioCallSid)
+      ).catch(() => undefined);
+    }
+  }
 
   if (structured.intents.order && !existingOrder) {
     // Use exact ElevenLabs transcript_summary when available; fall back to generated text.
@@ -639,6 +692,7 @@ export async function materializeFromStructuredOutput(
       totalCents: structured.order.total_cents,
       items: structured.order.items.map((item) => ({
         menuItemId: item.menuItemId,
+        customName: item.customName ?? (item.isCustom ? item.name : undefined),
         qty: item.qty,
         lineTotalCents: item.lineTotalCents
       }))
