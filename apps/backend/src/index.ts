@@ -21,7 +21,8 @@ import {
   replaceMessages,
   upsertCall,
   notifyUserActivity,
-  closeCall
+  closeCall,
+  supabase
 } from './supabase.js';
 
 const app = express();
@@ -253,6 +254,17 @@ app.post('/elevenlabs/voice', async (req, res) => {
   res.status(200).json({ ok: true });
 });
 
+/** Build the TwiML that connects a call to the AI agent media stream. */
+function agentStreamTwiml(): string {
+  const twiml = new twilio.twiml.VoiceResponse();
+  const connect = twiml.connect();
+  connect.stream({
+    url: `${env.APP_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://')}/twilio/media`,
+    track: 'inbound_track'
+  });
+  return twiml.toString();
+}
+
 app.post('/twilio/voice', twilioWebhookValidator, async (req, res) => {
   const callSid = String(req.body.CallSid ?? '');
   const from = String(req.body.From ?? '');
@@ -270,14 +282,39 @@ app.post('/twilio/voice', twilioWebhookValidator, async (req, res) => {
     }).catch((error) => logger.error({ error }, 'Failed to upsert call'));
   }
 
-  const twiml = new twilio.twiml.VoiceResponse();
-  const connect = twiml.connect();
-  connect.stream({
-    url: `${env.APP_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://')}/twilio/media`,
-    track: 'inbound_track'
-  });
+  // Check if a real restaurant phone is configured — if so, try it first.
+  // Agent picks up only if the restaurant doesn't answer within 5 rings (~25s).
+  const { data: settings } = await supabase
+    .from('restaurant_settings')
+    .select('restaurant_phone')
+    .limit(1)
+    .maybeSingle()
+    .catch(() => ({ data: null }));
 
-  res.type('text/xml').send(twiml.toString());
+  const restaurantPhone = (settings?.restaurant_phone ?? '').trim();
+
+  if (restaurantPhone) {
+    logger.info({ callSid, restaurantPhone }, 'Forwarding to restaurant phone first');
+    const twiml = new twilio.twiml.VoiceResponse();
+    const dial = twiml.dial({
+      timeout: 25,          // ~5 rings
+      action: `${env.APP_BASE_URL}/twilio/voice/fallback`,
+      method: 'POST'
+    });
+    dial.number(restaurantPhone);
+    res.type('text/xml').send(twiml.toString());
+  } else {
+    logger.info({ callSid }, 'No restaurant phone set — connecting to AI agent directly');
+    res.type('text/xml').send(agentStreamTwiml());
+  }
+});
+
+// Called by Twilio when the restaurant doesn't answer (timeout / busy / no-answer).
+app.post('/twilio/voice/fallback', twilioWebhookValidator, (req, res) => {
+  const dialStatus = String(req.body.DialCallStatus ?? '');
+  const callSid = String(req.body.CallSid ?? '');
+  logger.info({ callSid, dialStatus }, 'Restaurant did not answer — handing off to AI agent');
+  res.type('text/xml').send(agentStreamTwiml());
 });
 
 const server = http.createServer(app);
