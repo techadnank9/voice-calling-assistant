@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { to } = (await req.json().catch(() => ({}))) as { to?: string };
+  const { to, body: customBody } = (await req.json().catch(() => ({}))) as { to?: string; body?: string };
   const trimmed = (to ?? '').trim();
 
   if (!trimmed) {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const msg = await client.messages.create({
       from,
       to: e164,
-      body: "🧪 Test message from Mom's Biryani Ringo system. If you received this, SMS notifications are working!"
+      body: customBody?.trim() || "🧪 Test message from Mom's Biryani Ringo system. If you received this, SMS notifications are working!"
     });
     return Response.json({ ok: true, sid: msg.sid });
   } catch (err) {
