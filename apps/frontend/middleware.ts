@@ -1,9 +1,6 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { makeSessionToken } from './lib/auth';
+import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 
-// These are the rewrite targets for /moms/* — protect them too so
-// users can't bypass auth by hitting the internal paths directly.
 const INTERNAL_OPS = ['/overview', '/orders', '/calls', '/reservations', '/reports', '/earnings', '/settings', '/support'];
 
 function isProtected(pathname: string) {
@@ -13,15 +10,36 @@ function isProtected(pathname: string) {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
   if (!isProtected(pathname)) return NextResponse.next();
 
-  const token = request.cookies.get('ringo_session')?.value;
-  if (token && token === await makeSessionToken()) return NextResponse.next();
+  let response = NextResponse.next({ request });
 
-  const loginUrl = new URL('/login', request.url);
-  loginUrl.searchParams.set('from', pathname);
-  return NextResponse.redirect(loginUrl);
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return request.cookies.getAll(); },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        }
+      }
+    }
+  );
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('from', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return response;
 }
 
 export const config = {

@@ -1,7 +1,7 @@
-import { cookies } from 'next/headers';
+import { createClient } from '../../../../lib/supabase-server';
 
 export async function POST() {
-  const cookieStore = await cookies();
-  cookieStore.delete('ringo_session');
+  const supabase = await createClient();
+  await supabase.auth.signOut();
   return Response.json({ ok: true });
 }
