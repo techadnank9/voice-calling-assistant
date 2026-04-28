@@ -6,18 +6,45 @@ let _client: Twilio | null | undefined;
 
 function getClient(): Twilio | null {
   if (_client !== undefined) return _client;
-  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM) {
+  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN) {
     logger.warn({
       hasAccountSid: !!env.TWILIO_ACCOUNT_SID,
       hasAuthToken:  !!env.TWILIO_AUTH_TOKEN,
-      hasFrom:       !!env.TWILIO_FROM,
-    }, 'SMS skipped — Twilio not configured');
+    }, 'SMS/WhatsApp skipped — Twilio credentials not configured');
     _client = null;
     return null;
   }
-  logger.info({ from: env.TWILIO_FROM }, 'Twilio client initialised');
+  if (!env.TWILIO_WHATSAPP_FROM && !env.TWILIO_FROM) {
+    logger.warn('SMS/WhatsApp skipped — neither TWILIO_WHATSAPP_FROM nor TWILIO_FROM is set');
+    _client = null;
+    return null;
+  }
+  logger.info({
+    channel: env.TWILIO_WHATSAPP_FROM ? 'whatsapp' : 'sms',
+    from: env.TWILIO_WHATSAPP_FROM ?? env.TWILIO_FROM,
+  }, 'Twilio client initialised');
   _client = twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN);
   return _client;
+}
+
+/** Returns the active channel: 'whatsapp' | 'sms' | 'unconfigured' */
+export function getChannel(): 'whatsapp' | 'sms' | 'unconfigured' {
+  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN) return 'unconfigured';
+  if (env.TWILIO_WHATSAPP_FROM) return 'whatsapp';
+  if (env.TWILIO_FROM) return 'sms';
+  return 'unconfigured';
+}
+
+/** Returns the `from` value for Twilio messages.create() */
+function getFrom(): string {
+  if (env.TWILIO_WHATSAPP_FROM) return env.TWILIO_WHATSAPP_FROM;
+  return env.TWILIO_FROM!;
+}
+
+/** Formats `to` for the active channel. WhatsApp requires whatsapp: prefix. */
+function formatTo(e164: string): string {
+  if (env.TWILIO_WHATSAPP_FROM) return `whatsapp:${e164}`;
+  return e164;
 }
 
 /** Normalize US phone to E.164. Accepts +1XXXXXXXXXX, 1XXXXXXXXXX, or XXXXXXXXXX. */
@@ -51,45 +78,49 @@ type OrderSmsBase = {
   pickupTime: string;
 };
 
-async function sendSms(params: {
+async function sendMessage(params: {
   label: string;
   to: string | null;
-  rawTo: string | null;
   body: string;
   client: Twilio;
 }): Promise<void> {
-  const { label, to: rawPhone, rawTo, body, client } = params;
+  const { label, to: rawPhone, body, client } = params;
+  const channel = getChannel();
 
-  const to = toE164(rawPhone);
-  if (!to) {
-    logger.warn({ label, raw: rawTo }, `${label} SMS skipped — could not normalize phone to E.164`);
+  const e164 = toE164(rawPhone);
+  if (!e164) {
+    logger.warn({ label, raw: rawPhone }, `${label} message skipped — could not normalize phone to E.164`);
     return;
   }
 
-  logger.info({ label, to, from: env.TWILIO_FROM, bodyLen: body.length }, `${label} SMS — attempting send`);
+  const from = getFrom();
+  const to = formatTo(e164);
+
+  logger.info({ label, channel, to, from, bodyLen: body.length }, `${label} ${channel} — attempting send`);
 
   try {
-    const msg = await client.messages.create({ from: env.TWILIO_FROM!, to, body });
+    const msg = await client.messages.create({ from, to, body });
     logger.info({
       label,
+      channel,
       sid: msg.sid,
       to,
       from: msg.from,
       status: msg.status,
-      direction: msg.direction,
       price: msg.price,
       priceUnit: msg.priceUnit,
-    }, `${label} SMS sent — status: ${msg.status}`);
+    }, `${label} ${channel} sent — status: ${msg.status}`);
   } catch (err) {
     const e = err as { message?: string; code?: number; status?: number; moreInfo?: string };
     logger.error({
       label,
+      channel,
       to,
       twilioCode: e.code,
       httpStatus: e.status,
       message: e.message,
       moreInfo: e.moreInfo,
-    }, `${label} SMS FAILED — Twilio error ${e.code}: ${e.message}`);
+    }, `${label} ${channel} FAILED — Twilio error ${e.code}: ${e.message}`);
   }
 }
 
@@ -104,7 +135,7 @@ export async function sendCustomerOrderSms(
     `${formatItems(params.items)}. Total ${formatTotal(params.totalCents)}. ` +
     `Pickup in ${params.pickupTime}.`;
 
-  await sendSms({ label: 'Customer', to: params.to, rawTo: params.to, body, client });
+  await sendMessage({ label: 'Customer', to: params.to, body, client });
 }
 
 export async function sendRestaurantOrderSms(
@@ -119,5 +150,5 @@ export async function sendRestaurantOrderSms(
     `${formatItems(params.items)}. Total ${formatTotal(params.totalCents)}. ` +
     `Pickup in ${params.pickupTime}.`;
 
-  await sendSms({ label: 'Restaurant', to: params.to, rawTo: params.to, body, client });
+  await sendMessage({ label: 'Restaurant', to: params.to, body, client });
 }

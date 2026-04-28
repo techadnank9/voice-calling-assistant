@@ -18,6 +18,7 @@ const envSchema = z.object({
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_FROM: z.string().optional(),
+  TWILIO_WHATSAPP_FROM: z.string().optional(), // e.g. whatsapp:+14155238886 (sandbox) or whatsapp:+1XXX (production)
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   LOG_LEVEL: z.string().default('info')
@@ -46,6 +47,7 @@ export const env: Env = result.success
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
       TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
       TWILIO_FROM: process.env.TWILIO_FROM,
+      TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM,
       SUPABASE_URL: process.env.SUPABASE_URL ?? '',
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
       LOG_LEVEL: process.env.LOG_LEVEL ?? 'info'

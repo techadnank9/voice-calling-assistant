@@ -153,12 +153,17 @@ function TestSmsSection() {
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [channel, setChannel] = useState<{ channel: string; sandbox?: boolean } | null>(null);
 
-  // Pre-fill phone from saved restaurant number
+  // Pre-fill phone from saved restaurant number + load active channel
   useEffect(() => {
     fetch('/api/settings/restaurant-phone')
       .then((r) => r.json())
       .then((d) => { if (d.phone) setTo(d.phone); })
+      .catch(() => {});
+    fetch('/api/settings/messaging-channel')
+      .then((r) => r.json())
+      .then((d) => setChannel(d))
       .catch(() => {});
   }, []);
 
@@ -176,7 +181,7 @@ function TestSmsSection() {
         setMessage({ kind: 'error', text: data.error ?? 'Failed to send.' });
         return;
       }
-      setMessage({ kind: 'success', text: `Sent! SID: ${data.sid}` });
+      setMessage({ kind: 'success', text: `Sent via ${data.channel ?? 'unknown'}! SID: ${data.sid}` });
     } catch {
       setMessage({ kind: 'error', text: 'Network error. Try again.' });
     } finally {
@@ -186,9 +191,20 @@ function TestSmsSection() {
 
   const canSend = !sending && to.length > 3 && to !== '+1';
 
+  const channelPill = channel
+    ? channel.channel === 'whatsapp'
+      ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">WhatsApp{channel.sandbox ? ' (sandbox)' : ''}</span>
+      : channel.channel === 'sms'
+        ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">SMS</span>
+        : <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">Not configured</span>
+    : null;
+
   return (
     <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
-      <h2 className="text-lg font-bold tracking-tight text-slate-900">Send Test SMS</h2>
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-bold tracking-tight text-slate-900">Send Test Message</h2>
+        {channelPill}
+      </div>
       <p className="mt-1 text-sm text-slate-600">
         Verify Twilio is configured correctly by sending a message to any number.
       </p>
