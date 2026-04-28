@@ -29,13 +29,55 @@ export type ElevenLabsWebhookEvent = {
       start_time_unix_secs?: number;
       call_duration_secs?: number;
       termination_reason?: string | null;
+      /** Phone call metadata — field names vary across ElevenLabs API versions */
       phone_call?: {
         from_number?: string | null;
         to_number?: string | null;
+        caller_number?: string | null;   // alternate field name
+        called_number?: string | null;   // alternate field name
       } | null;
+    } | null;
+    /** Some ElevenLabs versions put phone_call at the data level, not under metadata */
+    phone_call?: {
+      from_number?: string | null;
+      to_number?: string | null;
+      caller_number?: string | null;
+      called_number?: string | null;
     } | null;
   } | null;
 };
+
+/**
+ * Extract the caller's phone number from an ElevenLabs webhook event.
+ * ElevenLabs uses different field names across API versions/integrations.
+ * Checks every known location and returns the first non-empty value.
+ */
+export function extractElevenLabsCallerNumber(event: ElevenLabsWebhookEvent): string {
+  const pc1 = event.data?.metadata?.phone_call;
+  const pc2 = event.data?.phone_call;
+  return (
+    pc1?.from_number    ||
+    pc1?.caller_number  ||
+    pc2?.from_number    ||
+    pc2?.caller_number  ||
+    ''
+  ).trim();
+}
+
+/**
+ * Extract the receiver/destination number from an ElevenLabs webhook event.
+ */
+export function extractElevenLabsReceiverNumber(event: ElevenLabsWebhookEvent): string {
+  const pc1 = event.data?.metadata?.phone_call;
+  const pc2 = event.data?.phone_call;
+  return (
+    pc1?.to_number      ||
+    pc1?.called_number  ||
+    pc2?.to_number      ||
+    pc2?.called_number  ||
+    ''
+  ).trim();
+}
 
 export function parseElevenLabsSignatureHeader(signatureHeader: string | undefined | null) {
   if (!signatureHeader) return null;

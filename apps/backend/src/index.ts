@@ -5,6 +5,8 @@ import pinoHttp from 'pino-http';
 import { WebSocketServer } from 'ws';
 import twilio from 'twilio';
 import {
+  extractElevenLabsCallerNumber,
+  extractElevenLabsReceiverNumber,
   getElevenLabsCallStatus,
   mapElevenLabsTranscriptToMessages,
   matchesConfiguredElevenLabsAgent,
@@ -183,8 +185,8 @@ app.post('/elevenlabs/voice', async (req, res) => {
     return;
   }
 
-  const from = event.data?.metadata?.phone_call?.from_number ?? '';
-  const to = event.data?.metadata?.phone_call?.to_number ?? '';
+  const from = extractElevenLabsCallerNumber(event);
+  const to = extractElevenLabsReceiverNumber(event);
   const startedAt = event.data?.metadata?.start_time_unix_secs
     ? new Date(event.data.metadata.start_time_unix_secs * 1000).toISOString()
     : new Date().toISOString();
@@ -193,7 +195,17 @@ app.post('/elevenlabs/voice', async (req, res) => {
       ? new Date((event.data.metadata.start_time_unix_secs + event.data.metadata.call_duration_secs) * 1000).toISOString()
       : new Date().toISOString();
 
-  logger.info({ conversationId, from, to, type: event.type }, 'ElevenLabs webhook received');
+  // Log raw phone_call metadata so we can diagnose missing caller numbers
+  logger.info(
+    {
+      conversationId,
+      from: from || '(empty)',
+      to: to || '(empty)',
+      type: event.type,
+      rawPhoneCallMeta: event.data?.metadata?.phone_call ?? event.data?.phone_call ?? null
+    },
+    'ElevenLabs webhook received'
+  );
 
   await upsertCall({
     twilioCallSid: conversationId,
