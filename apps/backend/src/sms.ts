@@ -7,9 +7,15 @@ let _client: Twilio | null | undefined;
 function getClient(): Twilio | null {
   if (_client !== undefined) return _client;
   if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM) {
+    logger.warn({
+      hasAccountSid: !!env.TWILIO_ACCOUNT_SID,
+      hasAuthToken:  !!env.TWILIO_AUTH_TOKEN,
+      hasFrom:       !!env.TWILIO_FROM,
+    }, 'SMS skipped — Twilio not configured');
     _client = null;
     return null;
   }
+  logger.info({ from: env.TWILIO_FROM }, 'Twilio client initialised');
   _client = twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN);
   return _client;
 }
@@ -45,53 +51,73 @@ type OrderSmsBase = {
   pickupTime: string;
 };
 
+async function sendSms(params: {
+  label: string;
+  to: string | null;
+  rawTo: string | null;
+  body: string;
+  client: Twilio;
+}): Promise<void> {
+  const { label, to: rawPhone, rawTo, body, client } = params;
+
+  const to = toE164(rawPhone);
+  if (!to) {
+    logger.warn({ label, raw: rawTo }, `${label} SMS skipped — could not normalize phone to E.164`);
+    return;
+  }
+
+  logger.info({ label, to, from: env.TWILIO_FROM, bodyLen: body.length }, `${label} SMS — attempting send`);
+
+  try {
+    const msg = await client.messages.create({ from: env.TWILIO_FROM!, to, body });
+    logger.info({
+      label,
+      sid: msg.sid,
+      to,
+      from: msg.from,
+      status: msg.status,
+      direction: msg.direction,
+      price: msg.price,
+      priceUnit: msg.priceUnit,
+    }, `${label} SMS sent — status: ${msg.status}`);
+  } catch (err) {
+    const e = err as { message?: string; code?: number; status?: number; moreInfo?: string };
+    logger.error({
+      label,
+      to,
+      twilioCode: e.code,
+      httpStatus: e.status,
+      message: e.message,
+      moreInfo: e.moreInfo,
+    }, `${label} SMS FAILED — Twilio error ${e.code}: ${e.message}`);
+  }
+}
+
 export async function sendCustomerOrderSms(
   params: OrderSmsBase & { to: string | null }
 ): Promise<void> {
   const client = getClient();
-  if (!client) {
-    logger.info('SMS skipped — Twilio not configured');
-    return;
-  }
-  const to = toE164(params.to);
-  if (!to) {
-    logger.info({ raw: params.to }, 'SMS to customer skipped — invalid phone');
-    return;
-  }
+  if (!client) return;
+
   const body =
     `Hi ${params.customerName}, your order at Mom's Biryani is confirmed. ` +
     `${formatItems(params.items)}. Total ${formatTotal(params.totalCents)}. ` +
     `Pickup in ${params.pickupTime}.`;
-  try {
-    const msg = await client.messages.create({ from: env.TWILIO_FROM!, to, body });
-    logger.info({ sid: msg.sid, to }, 'Customer order SMS sent');
-  } catch (err) {
-    logger.error({ err, to, code: (err as { code?: number })?.code }, 'Customer SMS failed');
-  }
+
+  await sendSms({ label: 'Customer', to: params.to, rawTo: params.to, body, client });
 }
 
 export async function sendRestaurantOrderSms(
   params: OrderSmsBase & { to: string | null; customerPhone: string | null }
 ): Promise<void> {
   const client = getClient();
-  if (!client) {
-    logger.info('SMS skipped — Twilio not configured');
-    return;
-  }
-  const to = toE164(params.to);
-  if (!to) {
-    logger.info({ raw: params.to }, 'SMS to restaurant skipped — invalid phone');
-    return;
-  }
+  if (!client) return;
+
   const phoneTag = params.customerPhone ? ` (${params.customerPhone})` : '';
   const body =
     `New order — ${params.customerName}${phoneTag}. ` +
     `${formatItems(params.items)}. Total ${formatTotal(params.totalCents)}. ` +
     `Pickup in ${params.pickupTime}.`;
-  try {
-    const msg = await client.messages.create({ from: env.TWILIO_FROM!, to, body });
-    logger.info({ sid: msg.sid, to }, 'Restaurant order SMS sent');
-  } catch (err) {
-    logger.error({ err, to, code: (err as { code?: number })?.code }, 'Restaurant SMS failed');
-  }
+
+  await sendSms({ label: 'Restaurant', to: params.to, rawTo: params.to, body, client });
 }
