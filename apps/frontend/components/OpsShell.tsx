@@ -149,13 +149,14 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
             </ul>
             <div className="sticky bottom-0 mt-auto bg-white pb-2 pt-3">
               <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-700">
-                  N
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-700">
+                  M
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-slate-900">REDACTED_EMAIL</p>
-                  <p className="truncate text-xs text-slate-500">Mom's Biryani</p>
+                  <p className="truncate text-xs text-slate-500">Mom&apos;s Biryani</p>
                 </div>
+                <LogoutButton />
               </div>
             </div>
           </aside>
@@ -165,5 +166,26 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
       </div>
 
     </main>
+  );
+}
+
+function LogoutButton() {
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleLogout}
+      title="Sign out"
+      className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <polyline points="16 17 21 12 16 7" />
+        <line x1="21" y1="12" x2="9" y2="12" />
+      </svg>
+    </button>
   );
 }
