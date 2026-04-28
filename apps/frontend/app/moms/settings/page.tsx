@@ -253,106 +253,50 @@ function TestSmsSection() {
 }
 
 function CallRoutingSection() {
-  const [phone, setPhone] = useState('+1');
-  const [initialPhone, setInitialPhone] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [twilioPhone, setTwilioPhone] = useState('');
 
   useEffect(() => {
     fetch('/api/settings/call-routing')
       .then((r) => r.json())
-      .then((d) => {
-        const p = d.restaurantPhone ?? '';
-        setPhone(p || '+1');
-        setInitialPhone(p);
-      })
-      .catch(() => setMessage({ kind: 'error', text: 'Failed to load routing settings.' }))
-      .finally(() => setLoading(false));
+      .then((d) => { if (d.twilioPhone) setTwilioPhone(d.twilioPhone); })
+      .catch(() => {});
   }, []);
-
-  async function handleSave() {
-    setSaving(true);
-    setMessage(null);
-    try {
-      const res = await fetch('/api/settings/call-routing', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restaurantPhone: phone === '+1' ? '' : phone })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage({ kind: 'error', text: data.error ?? 'Failed to save.' });
-        return;
-      }
-      setInitialPhone(data.restaurantPhone ?? '');
-      setMessage({ kind: 'success', text: 'Saved. Calls will ring restaurant first, then AI agent.' });
-    } catch {
-      setMessage({ kind: 'error', text: 'Network error. Try again.' });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const dirty = phone !== initialPhone && phone !== '+1';
-  const isEmpty = !phone || phone === '+1';
 
   return (
     <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
-      <h2 className="text-lg font-bold tracking-tight text-slate-900">Call Routing</h2>
+      <h2 className="text-lg font-bold tracking-tight text-slate-900">Call Routing Setup</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Enter the restaurant&apos;s real phone number. Incoming calls will ring it for{' '}
-        <strong>5 rings (~25 s)</strong> — if not picked up, the AI agent answers automatically.
-        Leave blank to have the agent answer all calls immediately.
+        Customers call the restaurant&apos;s real phone number. If nobody picks up after{' '}
+        <strong>5 rings</strong>, the carrier forwards the call to the Twilio number below and the
+        AI agent answers automatically.
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <input
-          type="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          disabled={loading || saving}
-          placeholder="+14086809804"
-          className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono outline-none focus:border-cyan-500 disabled:bg-slate-50 disabled:text-slate-400"
-        />
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={loading || saving || (!dirty && !isEmpty)}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500"
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-        {!isEmpty && (
-          <button
-            type="button"
-            onClick={() => { setPhone('+1'); }}
-            disabled={loading || saving}
-            className="text-sm text-slate-500 underline hover:text-slate-700 disabled:opacity-50"
-          >
-            Clear (agent answers all)
-          </button>
-        )}
+      <div className="mt-4 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Forward unanswered calls to</p>
+        <p className="mt-1 font-mono text-lg font-bold text-slate-900">
+          {twilioPhone || 'Loading…'}
+        </p>
       </div>
 
-      {!isEmpty && !loading && (
-        <p className="mt-3 flex items-center gap-1.5 text-sm text-slate-600">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          Calls will ring <span className="font-mono font-medium">{phone}</span> first
-        </p>
-      )}
+      <div className="mt-4 space-y-2 text-sm text-slate-700">
+        <p className="font-semibold">How to set up on your restaurant phone:</p>
+        <ol className="ml-4 list-decimal space-y-1 text-slate-600">
+          <li>
+            <strong>iPhone / Android:</strong> Settings → Phone → Call Forwarding → Forward when
+            unanswered → enter the Twilio number above.
+          </li>
+          <li>
+            <strong>Landline / carrier:</strong> Dial{' '}
+            <code className="rounded bg-slate-100 px-1">*61*{twilioPhone || '+1XXXXXXXXXX'}#</code>{' '}
+            from the restaurant phone (works on most US carriers).
+          </li>
+          <li>
+            <strong>VoIP / business line:</strong> Set "no-answer forward" in your VoIP admin panel
+            to the Twilio number, timeout 25 s (5 rings).
+          </li>
+        </ol>
+      </div>
 
-      {message && (
-        <p
-          className={`mt-3 rounded-lg px-3 py-2 text-sm ${
-            message.kind === 'success'
-              ? 'bg-emerald-50 text-emerald-800'
-              : 'bg-red-50 text-red-700'
-          }`}
-        >
-          {message.text}
-        </p>
-      )}
     </section>
   );
 }
