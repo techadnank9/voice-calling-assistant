@@ -29,6 +29,7 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
               >
                 {backendLabel}
               </a>
+              <LogoutButton />
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen((v) => !v)}
