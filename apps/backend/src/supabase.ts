@@ -431,14 +431,10 @@ function buildStructuredFromDataCollection(params: {
   const bool = (key: string): boolean => Boolean(dc[key]?.value);
 
   const dcName = str('customer_name');
-  // Priority: DC field → sequence inference (most reliable) → regex patterns
-  const sequenceName = !dcName && messages.length > 0 ? inferNameFromMessages(messages) : null;
-  const regexName = !dcName && !sequenceName ? extractCustomerName(userTranscript, assistantTranscript) : null;
-  const resolvedName = dcName || sequenceName || regexName;
-  const customerName = resolvedName
-    ? resolvedName.replace(/\b\w/g, (c) => c.toUpperCase())
+  const customerName = dcName
+    ? dcName.replace(/\b\w/g, (c) => c.toUpperCase())
     : fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller';
-  const hasActualName = Boolean(resolvedName);
+  const hasActualName = Boolean(dcName);
   const callerPhone = fromNumber || str('phone_number');
   const callType = str('call_type').toLowerCase();
   const itemsText = str('order_items');
