@@ -410,6 +410,43 @@ function looksLikeFallbackName(name: string) {
   return !lowered || lowered.startsWith('caller ') || lowered === 'caller' || lowered.includes('phone customer');
 }
 
+const WORD_NUM: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
+  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
+  sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
+  thirty: 30, forty: 40, fifty: 50, sixty: 60
+};
+
+function resolvePickupTime(raw: string, nowMs: number): string {
+  if (!raw) return raw;
+  // Already a real clock time — return as-is
+  if (/\d{1,2}(:\d{2})?\s*(am|pm)/i.test(raw)) return raw;
+
+  const s = raw.toLowerCase().replace(/-/g, ' ');
+  let offsetMs = 0;
+
+  const minMatch = s.match(/(\d+|[a-z]+(?:\s[a-z]+)?)\s+(?:more\s+)?minutes?/);
+  if (minMatch) {
+    const v = minMatch[1].trim();
+    offsetMs += (parseInt(v, 10) || WORD_NUM[v] || 20) * 60_000;
+  }
+
+  const hourMatch = s.match(/(an|a|\d+|[a-z]+)\s+hours?/);
+  if (hourMatch) {
+    const v = hourMatch[1];
+    offsetMs += (v === 'an' || v === 'a' ? 1 : parseInt(v, 10) || WORD_NUM[v] || 1) * 3_600_000;
+  }
+
+  if (offsetMs > 0) {
+    return new Date(nowMs + offsetMs).toLocaleTimeString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      hour: 'numeric', minute: '2-digit', hour12: true
+    });
+  }
+
+  return raw;
+}
+
 function buildStructuredFromDataCollection(params: {
   twilioCallSid: string;
   provider: ConversationProvider;
@@ -439,7 +476,7 @@ function buildStructuredFromDataCollection(params: {
   const callType = str('call_type').toLowerCase();
   const itemsText = str('order_items');
   const totalFromDc = num('total_amount');
-  const pickupTime = str('pickup_time') || '20 minutes';
+  const pickupTime = resolvePickupTime(str('pickup_time') || '20 minutes', Date.now());
   const partySizeFromDc = num('party_size');
   const reservationDate = str('reservation_date') || 'today';
   const reservationTime = str('reservation_time') || '';
