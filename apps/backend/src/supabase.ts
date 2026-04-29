@@ -439,7 +439,7 @@ function buildStructuredFromDataCollection(params: {
     ? resolvedName.replace(/\b\w/g, (c) => c.toUpperCase())
     : fromNumber ? `Caller ${fromNumber.replace(/\D/g, '').slice(-4)}` : 'Caller';
   const hasActualName = Boolean(resolvedName);
-  const callerPhone = str('phone_number') || fromNumber;
+  const callerPhone = fromNumber || str('phone_number');
   const callType = str('call_type').toLowerCase();
   const itemsText = str('order_items');
   const totalFromDc = num('total_amount');
@@ -567,15 +567,10 @@ export async function persistFallbackOrderAndReservationFromCall(
     }).catch(() => undefined);
   }
 
-  // Prefer the phone number explicitly stated by the caller via ElevenLabs data_collection
-  // over the Twilio from_number (which may be a relay/masked number).
+  // from_number on the call row is the authoritative ElevenLabs external_number (real caller ID).
+  // Only fall back to DC phone_number when the call has no from_number at all.
   const dcPhone = structured.customer.caller_phone;
-  if (dcPhone && dcPhone !== callRow.from_number) {
-    await Promise.resolve(
-      supabase.from('calls').update({ from_number: dcPhone }).eq('id', callRow.id)
-    ).catch(() => undefined);
-    callRow.from_number = dcPhone;
-  } else if (!callRow.from_number && dcPhone) {
+  if (!callRow.from_number && dcPhone) {
     await Promise.resolve(
       supabase.from('calls').update({ from_number: dcPhone }).eq('id', callRow.id)
     ).catch(() => undefined);
@@ -584,7 +579,7 @@ export async function persistFallbackOrderAndReservationFromCall(
 
   await materializeFromStructuredOutput(
     twilioCallSid,
-    callRow.from_number ?? dcPhone ?? null,
+    callRow.from_number ?? null,
     structured,
     overrideSummary ?? null
   );
