@@ -172,17 +172,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── INTEGRATIONS ── */}
-        <section id="integrations" className="mt-14">
-          <SectionLabel>Integrations</SectionLabel>
-          <h2 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Powered by best-in-class infra</h2>
-          <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <DarkCard icon="📞" title="Twilio" body="Phone number provisioning and media transport." />
-            <DarkCard icon="🤖" title="ElevenLabs" body="Conversational AI with natural speech and real-time transcription." />
-            <DarkCard icon="🗄️" title="Supabase" body="Live data persistence and instant dashboard sync." />
-          </div>
-        </section>
-
         {/* ── PRICING ── */}
         <section id="pricing" className="mt-14">
           <SectionLabel>Pricing</SectionLabel>

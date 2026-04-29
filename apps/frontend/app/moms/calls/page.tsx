@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { OpsShell } from '../../../components/OpsShell';
-import { formatConversationProvider, normalizeConversationProvider } from '../../../lib/conversationProvider';
 import { hasSupabaseConfig, supabase } from '../../../lib/supabase';
 
 type Call = {
@@ -265,7 +264,6 @@ export default function CallsPage() {
                     {displayFrom(call.from_number, call.twilio_call_sid)} {'->'} {displayTo(call.to_number)}
                   </p>
                   <div className="flex items-center gap-2">
-                    <ProviderChip provider={call.provider} />
                     <StatusChip status={call.status} />
                   </div>
                 </div>
@@ -327,19 +325,6 @@ function StatusChip({ status }: { status: string }) {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>{status}</span>;
 }
 
-function ProviderChip({ provider }: { provider?: string | null }) {
-  const normalized = normalizeConversationProvider(provider);
-  const cls =
-    normalized === 'elevenlabs'
-      ? 'bg-violet-100 text-violet-800'
-      : 'bg-slate-100 text-slate-700';
-
-  return (
-    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>
-      {formatConversationProvider(provider)}
-    </span>
-  );
-}
 
 function format(v: string | null) {
   if (!v) return 'N/A';
