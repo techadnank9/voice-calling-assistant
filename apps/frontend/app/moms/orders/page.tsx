@@ -604,7 +604,7 @@ export default function HomePage() {
                         <th className="px-3 py-2">Items</th>
                         <th className="px-3 py-2">Total</th>
                         <th className="px-3 py-2">Status</th>
-                        <th className="px-3 py-2">Duration</th>
+                        <th className="px-3 py-2">Pickup Time</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -617,7 +617,6 @@ export default function HomePage() {
                           const count = (itemsByOrder.get(order.id) ?? []).length;
                           const call = resolveCallForOrder(order, callsBySid, callsByPhone, latestCallByPhone);
                           const displayName = resolveDisplayName(order.customer_name, call?.id, nameByCallId);
-                          const duration = formatDuration(call?.started_at ?? null, call?.ended_at ?? null);
                           const rowDate = formatRowDate(call?.created_at ?? order.created_at);
                           const rowTime = formatRowTime(call?.created_at ?? order.created_at);
                           return (
@@ -637,7 +636,7 @@ export default function HomePage() {
                                   {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                                 </span>
                               </td>
-                              <td className="px-3 py-3 text-slate-500">{duration}</td>
+                              <td className="px-3 py-3 text-slate-500">{order.pickup_time}</td>
                             </tr>
                           );
                         })
@@ -653,7 +652,6 @@ export default function HomePage() {
                           const count = (itemsByOrder.get(order.id) ?? []).length;
                           const call = resolveCallForOrder(order, callsBySid, callsByPhone, latestCallByPhone);
                           const displayName = resolveDisplayName(order.customer_name, call?.id, nameByCallId);
-                          const duration = formatDuration(call?.started_at ?? null, call?.ended_at ?? null);
                           const rowDate = formatRowDate(call?.created_at ?? order.created_at);
                           const rowTime = formatRowTime(call?.created_at ?? order.created_at);
                           return (
@@ -678,7 +676,7 @@ export default function HomePage() {
                                 </span>
                               </div>
                               <div className="mt-1 flex items-center gap-2">
-                                <p className="text-xs text-slate-500">Duration: {duration}</p>
+                                <p className="text-xs text-slate-500">Pickup: {order.pickup_time}</p>
                                 <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusColor(order.status)}`}>
                                   {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                                 </span>
