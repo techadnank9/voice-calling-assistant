@@ -745,7 +745,7 @@ export async function materializeFromStructuredOutput(
     logger.info({ orderId: existingOrder.id, twilioCallSid }, 'Order cancelled by voice agent');
   }
 
-  if (structured.intents.order && !existingOrder) {
+  if (structured.intents.order && !existingOrder && structured.order.items.length > 0) {
     // Use exact ElevenLabs transcript_summary when available; fall back to generated text.
     const generatedSummary = [
       `${structured.customer.name} called to place a pickup order.`,
