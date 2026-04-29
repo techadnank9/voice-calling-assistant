@@ -98,14 +98,16 @@ async function main() {
   }
   const mergedDc = { ...existing, ...ADVANCE_ORDER_FIELDS };
 
-  // ── 2. System prompt — prepend {{current_time}} if absent ─────────────────
+  // ── 2. System prompt — ensure CURRENT_TIME_PREFIX is present ────────────────
   const existingPrompt = typeof promptConfig.prompt === 'string' ? promptConfig.prompt : '';
   let newPrompt = existingPrompt;
-  if (!existingPrompt.includes('{{current_time}}')) {
-    newPrompt = CURRENT_TIME_PREFIX + existingPrompt;
-    console.log('Adding {{current_time}} to system prompt');
+  if (!existingPrompt.startsWith(CURRENT_TIME_PREFIX)) {
+    // Strip any old prefix that starts with "Current time: {{current_time}}" so we don't duplicate
+    const stripped = existingPrompt.replace(/^Current time: \{\{current_time\}\}[^\n]*\n\n(?:When capturing pickup_time[^\n]*\n\n)?/, '');
+    newPrompt = CURRENT_TIME_PREFIX + stripped;
+    console.log('Updating system prompt prefix with current_time + pickup_time instruction');
   } else {
-    console.log('✓ {{current_time}} already in system prompt');
+    console.log('✓ System prompt prefix already up to date');
   }
 
   // ── 3. Initiation webhook ─────────────────────────────────────────────────
