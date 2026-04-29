@@ -33,8 +33,11 @@ export type ElevenLabsWebhookEvent = {
       phone_call?: {
         from_number?: string | null;
         to_number?: string | null;
-        caller_number?: string | null;   // alternate field name
-        called_number?: string | null;   // alternate field name
+        caller_number?: string | null;
+        called_number?: string | null;
+        external_number?: string | null;  // ElevenLabs Twilio integration: caller's number
+        agent_number?: string | null;     // ElevenLabs Twilio integration: restaurant's number
+        [key: string]: string | null | undefined;
       } | null;
     } | null;
     /** Some ElevenLabs versions put phone_call at the data level, not under metadata */
@@ -43,6 +46,9 @@ export type ElevenLabsWebhookEvent = {
       to_number?: string | null;
       caller_number?: string | null;
       called_number?: string | null;
+      external_number?: string | null;
+      agent_number?: string | null;
+      [key: string]: string | null | undefined;
     } | null;
   } | null;
 };
@@ -56,10 +62,12 @@ export function extractElevenLabsCallerNumber(event: ElevenLabsWebhookEvent): st
   const pc1 = event.data?.metadata?.phone_call;
   const pc2 = event.data?.phone_call;
   return (
-    pc1?.from_number    ||
-    pc1?.caller_number  ||
-    pc2?.from_number    ||
-    pc2?.caller_number  ||
+    pc1?.external_number ||
+    pc1?.from_number     ||
+    pc1?.caller_number   ||
+    pc2?.external_number ||
+    pc2?.from_number     ||
+    pc2?.caller_number   ||
     ''
   ).trim();
 }
