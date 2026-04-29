@@ -153,6 +153,22 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'voice-calling-assistant-backend' });
 });
 
+// ElevenLabs calls this at the start of every inbound call to get dynamic variables.
+// The agent's system prompt must contain {{current_time}} for substitution to work.
+app.post('/elevenlabs/initiation', (_req, res) => {
+  const now = new Date();
+  const currentTime = now.toLocaleString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+  res.json({
+    type: 'conversation_initiation_client_data',
+    dynamic_variables: { current_time: currentTime }
+  });
+});
+
 app.post('/elevenlabs/voice', async (req, res) => {
   const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {});
 

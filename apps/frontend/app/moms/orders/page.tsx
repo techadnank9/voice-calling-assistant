@@ -14,6 +14,9 @@ type Order = {
   total_cents: number;
   created_at: string;
   notes?: string | null;
+  is_advance_order?: boolean | null;
+  advance_pickup_date?: string | null;
+  advance_pickup_time?: string | null;
 };
 
 const backendUrl = getBackendBaseUrl(process.env.NEXT_PUBLIC_BACKEND_BASE_URL);
@@ -24,7 +27,26 @@ type OrderItem = {
   order_id: string;
   qty?: number;
   line_total_cents?: number;
-  menu_items?: { name?: string | null } | null;
+  menu_items?: { name?: string | null; price_cents?: number | null } | null;
+};
+
+type AuditEntry = {
+  id: string;
+  order_id: string | null;
+  action: string;
+  changed_by: string;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  note: string | null;
+  created_at: string;
+};
+
+type EditItem = {
+  id: string;
+  name: string;
+  qty: number;
+  unit_price_cents: number;
+  line_total_cents: number;
 };
 
 type Call = {
@@ -55,6 +77,13 @@ export default function HomePage() {
   const [dateFilter, setDateFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'range'>('today');
   const [rangeFrom, setRangeFrom] = useState('');
   const [rangeTo, setRangeTo] = useState('');
+  const [editMode, setEditMode] = useState(false);
+  const [editItems, setEditItems] = useState<EditItem[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [showAuditLog, setShowAuditLog] = useState(false);
 
   useEffect(() => {
     const client = supabase;
@@ -63,7 +92,7 @@ export default function HomePage() {
     const load = async () => {
       const { data: ordersData } = await client
         .from('orders')
-        .select('id,caller_phone,customer_name,pickup_time,status,total_cents,created_at,notes')
+        .select('id,caller_phone,customer_name,pickup_time,status,total_cents,created_at,notes,is_advance_order,advance_pickup_date,advance_pickup_time')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -77,7 +106,7 @@ export default function HomePage() {
 
       const { data: itemsData } = await client
         .from('order_items')
-        .select('id,order_id,qty,line_total_cents,menu_items(name)')
+        .select('id,order_id,qty,line_total_cents,menu_items(name,price_cents)')
         .in('order_id', rows.map((r) => r.id));
 
       setOrderItems((itemsData as OrderItem[]) ?? []);
@@ -319,6 +348,180 @@ export default function HomePage() {
     buildSummary().catch(() => setLiveConversationSummary(''));
   }, [selectedOrder, selectedOrderCall]);
 
+  // Load audit log when an order is selected
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !selectedOrderId) { setAuditLog([]); return; }
+    client.from('order_audit_log')
+      .select('id,order_id,action,changed_by,old_values,new_values,note,created_at')
+      .eq('order_id', selectedOrderId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => setAuditLog((data as AuditEntry[]) ?? []), () => setAuditLog([]));
+  }, [selectedOrderId]);
+
+  // Reset edit/confirm state when selection changes
+  useEffect(() => {
+    setEditMode(false);
+    setEditItems([]);
+    setShowDeleteConfirm(false);
+    setShowCancelConfirm(false);
+    setShowAuditLog(false);
+  }, [selectedOrderId]);
+
+  function enterEditMode(items: OrderItem[]) {
+    setEditItems(items.map((item) => ({
+      id: item.id,
+      name: item.menu_items?.name ?? 'Item',
+      qty: item.qty ?? 1,
+      unit_price_cents: item.menu_items?.price_cents ?? (item.qty ? Math.round((item.line_total_cents ?? 0) / item.qty) : 0),
+      line_total_cents: item.line_total_cents ?? 0
+    })));
+    setEditMode(true);
+  }
+
+  function setEditItemQty(id: string, qty: number) {
+    setEditItems((prev) => prev.map((ei) => {
+      if (ei.id !== id) return ei;
+      const newQty = Math.max(1, qty);
+      return { ...ei, qty: newQty, line_total_cents: ei.unit_price_cents * newQty };
+    }));
+  }
+
+  function removeEditItem(id: string) {
+    setEditItems((prev) => prev.filter((ei) => ei.id !== id));
+  }
+
+  async function handleSaveEdit(orderId: string, originalItems: OrderItem[]) {
+    const client = supabase;
+    if (!client) return;
+    setIsSaving(true);
+    try {
+      const originalById = new Map(originalItems.map((i) => [i.id, i]));
+      const editById = new Map(editItems.map((i) => [i.id, i]));
+
+      // Items removed
+      const removed = originalItems.filter((i) => !editById.has(i.id));
+      // Items with qty changed
+      const changed = editItems.filter((ei) => {
+        const orig = originalById.get(ei.id);
+        return orig && orig.qty !== ei.qty;
+      });
+
+      const auditChanges: unknown[] = [];
+
+      if (removed.length > 0) {
+        await client.from('order_items').delete().in('id', removed.map((i) => i.id));
+        for (const item of removed) {
+          auditChanges.push({ type: 'item_removed', name: item.menu_items?.name ?? item.id, qty: item.qty, line_total_cents: item.line_total_cents });
+        }
+      }
+
+      for (const ei of changed) {
+        const orig = originalById.get(ei.id)!;
+        await client.from('order_items').update({ qty: ei.qty, line_total_cents: ei.line_total_cents }).eq('id', ei.id);
+        auditChanges.push({ type: 'qty_changed', name: ei.name, old_qty: orig.qty, new_qty: ei.qty });
+      }
+
+      const newTotal = editItems.reduce((s, i) => s + i.line_total_cents, 0);
+      const oldTotal = originalItems.reduce((s, i) => s + (i.line_total_cents ?? 0), 0);
+      await client.from('orders').update({ total_cents: newTotal }).eq('id', orderId);
+
+      await client.from('order_audit_log').insert({
+        order_id: orderId,
+        action: 'order_modified',
+        changed_by: 'staff',
+        old_values: { total_cents: oldTotal, items: originalItems.map((i) => ({ name: i.menu_items?.name, qty: i.qty })) },
+        new_values: { total_cents: newTotal, items: editItems.map((i) => ({ name: i.name, qty: i.qty })), changes: auditChanges },
+        note: `Staff edited order: ${auditChanges.length} change(s)`
+      });
+
+      // Reload
+      const { data: updatedItems } = await client
+        .from('order_items').select('id,order_id,qty,line_total_cents,menu_items(name,price_cents)')
+        .eq('order_id', orderId);
+      setOrderItems((prev) => [...prev.filter((i) => i.order_id !== orderId), ...((updatedItems as OrderItem[]) ?? [])]);
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, total_cents: newTotal } : o));
+
+      // Reload audit log
+      const { data: newLog } = await client.from('order_audit_log')
+        .select('id,order_id,action,changed_by,old_values,new_values,note,created_at')
+        .eq('order_id', orderId).order('created_at', { ascending: false }).limit(50);
+      setAuditLog((newLog as AuditEntry[]) ?? []);
+
+      setEditMode(false);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleStatusChange(orderId: string, oldStatus: string, newStatus: string) {
+    const client = supabase;
+    if (!client) return;
+    await client.from('orders').update({ status: newStatus }).eq('id', orderId);
+    await client.from('order_audit_log').insert({
+      order_id: orderId,
+      action: 'status_changed',
+      changed_by: 'staff',
+      old_values: { status: oldStatus },
+      new_values: { status: newStatus },
+      note: `Status changed from ${oldStatus} to ${newStatus} by staff`
+    });
+    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: newStatus } : o));
+    const { data: newLog } = await client.from('order_audit_log')
+      .select('id,order_id,action,changed_by,old_values,new_values,note,created_at')
+      .eq('order_id', orderId).order('created_at', { ascending: false }).limit(50);
+    setAuditLog((newLog as AuditEntry[]) ?? []);
+  }
+
+  async function handleCancelOrder(orderId: string, currentStatus: string) {
+    const client = supabase;
+    if (!client) return;
+    setIsSaving(true);
+    try {
+      await client.from('orders').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_reason: 'Cancelled by staff' }).eq('id', orderId);
+      await client.from('order_audit_log').insert({
+        order_id: orderId,
+        action: 'order_cancelled',
+        changed_by: 'staff',
+        old_values: { status: currentStatus },
+        new_values: { status: 'cancelled' },
+        note: 'Cancelled by staff via dashboard'
+      });
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: 'cancelled' } : o));
+      const { data: newLog } = await client.from('order_audit_log')
+        .select('id,order_id,action,changed_by,old_values,new_values,note,created_at')
+        .eq('order_id', orderId).order('created_at', { ascending: false }).limit(50);
+      setAuditLog((newLog as AuditEntry[]) ?? []);
+    } finally {
+      setIsSaving(false);
+      setShowCancelConfirm(false);
+    }
+  }
+
+  async function handleDeleteOrder(orderId: string) {
+    const client = supabase;
+    if (!client) return;
+    setIsSaving(true);
+    try {
+      // Log before delete so we have a record
+      await client.from('order_audit_log').insert({
+        order_id: orderId,
+        action: 'order_deleted',
+        changed_by: 'staff',
+        new_values: null,
+        note: `Order ${orderId.slice(0, 8).toUpperCase()} deleted by staff`
+      });
+      await client.from('orders').delete().eq('id', orderId);
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      setOrderItems((prev) => prev.filter((i) => i.order_id !== orderId));
+      setSelectedOrderId(null);
+    } finally {
+      setIsSaving(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
   return (
     <OpsShell active="orders">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -429,7 +632,17 @@ export default function HomePage() {
                               <td className="px-3 py-3 text-slate-700">{rowTime}</td>
                               <td className="px-3 py-3 text-indigo-600">{count} item{count === 1 ? '' : 's'}</td>
                               <td className="px-3 py-3 font-bold text-slate-900">${(order.total_cents / 100).toFixed(2)}</td>
-                              <td className="px-3 py-3">Pickup</td>
+                              <td className="px-3 py-3">
+                                {order.is_advance_order ? (
+                                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">
+                                    Advance
+                                  </span>
+                                ) : (
+                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                                    Pickup
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-3 py-3 text-slate-500">{duration}</td>
                             </tr>
                           );
@@ -470,7 +683,12 @@ export default function HomePage() {
                                   {count} item{count === 1 ? '' : 's'}
                                 </span>
                               </div>
-                              <p className="mt-1 text-xs text-slate-500">Duration: {duration}</p>
+                              <div className="mt-1 flex items-center gap-2">
+                                <p className="text-xs text-slate-500">Duration: {duration}</p>
+                                {order.is_advance_order && (
+                                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">Advance</span>
+                                )}
+                              </div>
                             </button>
                           );
                         })}
@@ -480,13 +698,17 @@ export default function HomePage() {
                 </div>
       {selectedOrder ? (() => {
         const selectedItems = itemsByOrder.get(selectedOrder.id) ?? [];
+        const isCancelled = selectedOrder.status === 'cancelled';
+        const editTotal = editItems.reduce((s, i) => s + i.line_total_cents, 0);
         return (
         <>
-        <div className="fixed inset-0 z-20 bg-slate-900/25" onClick={() => setSelectedOrderId(null)} />
+        <div className="fixed inset-0 z-20 bg-slate-900/25" onClick={() => { if (!editMode) setSelectedOrderId(null); }} />
         <aside className="fixed inset-y-0 right-0 z-30 h-screen w-full max-w-md overflow-y-auto overscroll-contain border-l border-slate-200 bg-white p-5 shadow-2xl">
+
+          {/* Header */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-lg font-bold text-emerald-700">
+              <div className={`flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold ${isCancelled ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'}`}>
                 {selectedResolvedName.charAt(0).toUpperCase()}
               </div>
               <div>
@@ -497,44 +719,272 @@ export default function HomePage() {
             <button onClick={() => setSelectedOrderId(null)} className="text-2xl text-slate-400 hover:text-slate-700">×</button>
           </div>
 
+          {/* Order summary + status */}
           <div className="mt-5 rounded-xl border border-slate-200 p-4">
             <div className="flex items-center justify-between">
-              <p className="font-semibold text-slate-900">Order #{selectedOrder.id.slice(0, 6).toUpperCase()}</p>
-              <p className="text-3xl font-bold text-slate-900">${(selectedOrder.total_cents / 100).toFixed(2)}</p>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">Pickup time: {selectedOrder.pickup_time}</p>
-          </div>
-
-          <div className="mt-4 space-y-3 rounded-xl border border-slate-200 p-4">
-            {selectedItems.length === 0 ? <p className="text-sm text-slate-500">No line items</p> : null}
-            {selectedItems.map((item) => (
-              <div key={item.id} className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold text-slate-900">
-                    {item.qty ?? 1}x {item.menu_items?.name ?? 'Menu item'}
-                  </p>
-                  <p className="font-semibold text-slate-800">${((item.line_total_cents ?? 0) / 100).toFixed(2)}</p>
-                </div>
+              <div>
+                <p className="font-semibold text-slate-900">Order #{selectedOrder.id.slice(0, 6).toUpperCase()}</p>
+                <p className="mt-0.5 text-sm text-slate-500">Pickup: {selectedOrder.pickup_time}</p>
               </div>
-            ))}
+              <p className={`text-3xl font-bold ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                ${(selectedOrder.total_cents / 100).toFixed(2)}
+              </p>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status:</span>
+              {isCancelled ? (
+                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">Cancelled</span>
+              ) : (
+                <select
+                  value={selectedOrder.status}
+                  onChange={(e) => void handleStatusChange(selectedOrder.id, selectedOrder.status, e.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200"
+                >
+                  {['new','preparing','ready','completed'].map((s) => (
+                    <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-2">
-            <span className="rounded-lg bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">Pickup</span>
-            <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">ASAP</span>
+          {/* Action buttons */}
+          {!isCancelled && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {!editMode ? (
+                <>
+                  <button
+                    onClick={() => enterEditMode(selectedItems)}
+                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                  >
+                    Edit Items
+                  </button>
+                  <button
+                    onClick={() => setShowCancelConfirm(true)}
+                    className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                  >
+                    Cancel Order
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                  >
+                    Delete Order
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => void handleSaveEdit(selectedOrder.id, selectedItems)}
+                    disabled={isSaving || editItems.length === 0}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {isSaving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                  <button
+                    onClick={() => setEditMode(false)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  >
+                    Discard
+                  </button>
+                </>
+              )}
+              {!editMode && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 hidden"
+                />
+              )}
+            </div>
+          )}
+          {isCancelled && (
+            <div className="mt-3">
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+              >
+                Delete Order
+              </button>
+            </div>
+          )}
+
+          {/* Cancel confirm */}
+          {showCancelConfirm && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm font-semibold text-amber-800">Cancel this order?</p>
+              <p className="mt-1 text-xs text-amber-700">This will mark the order as cancelled. It can still be viewed in history.</p>
+              <div className="mt-2 flex gap-2">
+                <button onClick={() => void handleCancelOrder(selectedOrder.id, selectedOrder.status)} disabled={isSaving}
+                  className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50">
+                  {isSaving ? 'Cancelling…' : 'Yes, cancel'}
+                </button>
+                <button onClick={() => setShowCancelConfirm(false)}
+                  className="rounded-lg border border-amber-200 bg-white px-3 py-1 text-xs font-semibold text-amber-700">
+                  Keep order
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Delete confirm */}
+          {showDeleteConfirm && (
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3">
+              <p className="text-sm font-semibold text-red-800">Delete this order permanently?</p>
+              <p className="mt-1 text-xs text-red-700">This cannot be undone. The order and all items will be removed.</p>
+              <div className="mt-2 flex gap-2">
+                <button onClick={() => void handleDeleteOrder(selectedOrder.id)} disabled={isSaving}
+                  className="rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                  {isSaving ? 'Deleting…' : 'Yes, delete'}
+                </button>
+                <button onClick={() => setShowDeleteConfirm(false)}
+                  className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700">
+                  Keep order
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Items list */}
+          <div className="mt-4 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</p>
+              {editMode && <p className="text-xs font-bold text-indigo-600">New total: ${(editTotal / 100).toFixed(2)}</p>}
+            </div>
+            <div className="p-4 space-y-3">
+              {editMode ? (
+                editItems.length === 0 ? (
+                  <p className="text-sm text-slate-400 italic">All items removed — save to apply or discard.</p>
+                ) : (
+                  editItems.map((ei) => (
+                    <div key={ei.id} className="flex items-center gap-2 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">{ei.name}</p>
+                        <p className="text-xs text-slate-500">${(ei.unit_price_cents / 100).toFixed(2)} each</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setEditItemQty(ei.id, ei.qty - 1)}
+                          className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-600 hover:bg-slate-100 text-sm font-bold">−</button>
+                        <span className="w-8 text-center text-sm font-semibold text-slate-900">{ei.qty}</span>
+                        <button onClick={() => setEditItemQty(ei.id, ei.qty + 1)}
+                          className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-600 hover:bg-slate-100 text-sm font-bold">+</button>
+                      </div>
+                      <p className="w-16 text-right text-sm font-semibold text-slate-800">${(ei.line_total_cents / 100).toFixed(2)}</p>
+                      <button onClick={() => removeEditItem(ei.id)}
+                        className="ml-1 flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-500 text-sm">×</button>
+                    </div>
+                  ))
+                )
+              ) : (
+                <>
+                  {selectedItems.length === 0 && <p className="text-sm text-slate-500">No line items</p>}
+                  {selectedItems.map((item) => (
+                    <div key={item.id} className={`border-b border-slate-100 pb-3 last:border-b-0 last:pb-0 ${isCancelled ? 'opacity-50' : ''}`}>
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-slate-900">
+                          {item.qty ?? 1}× {item.menu_items?.name ?? 'Menu item'}
+                        </p>
+                        <p className="font-semibold text-slate-800">${((item.line_total_cents ?? 0) / 100).toFixed(2)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
           </div>
 
+          {/* Type badges */}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {selectedOrder.is_advance_order ? (
+              <span className="rounded-lg bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-800">Advance Order</span>
+            ) : (
+              <span className="rounded-lg bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">Pickup</span>
+            )}
+            {selectedOrder.is_advance_order && selectedOrder.advance_pickup_date ? (
+              <span className="rounded-lg bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 capitalize">
+                {selectedOrder.advance_pickup_date}
+              </span>
+            ) : null}
+            {selectedOrder.is_advance_order && selectedOrder.advance_pickup_time ? (
+              <span className="rounded-lg bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700">
+                {selectedOrder.advance_pickup_time}
+              </span>
+            ) : (
+              !selectedOrder.is_advance_order && (
+                <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">ASAP</span>
+              )
+            )}
+          </div>
+
+          {/* Conversation summary */}
           <div className="mt-4 rounded-xl border border-slate-200 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversation Summary</p>
-            <p className="mt-2 text-sm text-slate-700">
-              {selectedOrderConversationSummary}
-            </p>
+            <p className="mt-2 text-sm text-slate-700">{selectedOrderConversationSummary}</p>
           </div>
+
+          {/* Audit log */}
+          <div className="mt-4 rounded-xl border border-slate-200">
+            <button
+              onClick={() => setShowAuditLog((v) => !v)}
+              className="flex w-full items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-50"
+            >
+              <span>History ({auditLog.length})</span>
+              <span>{showAuditLog ? '▲' : '▼'}</span>
+            </button>
+            {showAuditLog && (
+              <div className="border-t border-slate-100 divide-y divide-slate-100">
+                {auditLog.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-slate-400">No history yet</p>
+                ) : (
+                  auditLog.map((entry) => (
+                    <div key={entry.id} className="px-4 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${auditActionColor(entry.action)}`}>
+                          {formatAuditAction(entry.action)}
+                        </span>
+                        <span className="text-[11px] text-slate-400">{formatAuditTime(entry.created_at)}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">by {entry.changed_by}</p>
+                      {entry.note && <p className="mt-0.5 text-xs text-slate-600">{entry.note}</p>}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
         </aside>
         </>
       )})() : null}
     </OpsShell>
   );
+}
+
+function formatAuditAction(action: string) {
+  const map: Record<string, string> = {
+    order_created: 'Created',
+    order_modified: 'Edited',
+    order_cancelled: 'Cancelled',
+    order_deleted: 'Deleted',
+    status_changed: 'Status',
+    item_removed: 'Item removed',
+    qty_changed: 'Qty changed'
+  };
+  return map[action] ?? action.replace(/_/g, ' ');
+}
+
+function auditActionColor(action: string) {
+  if (action === 'order_created') return 'bg-emerald-100 text-emerald-700';
+  if (action === 'order_cancelled') return 'bg-amber-100 text-amber-700';
+  if (action === 'order_deleted') return 'bg-red-100 text-red-700';
+  if (action === 'order_modified') return 'bg-indigo-100 text-indigo-700';
+  if (action === 'status_changed') return 'bg-sky-100 text-sky-700';
+  return 'bg-slate-100 text-slate-600';
+}
+
+function formatAuditTime(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 function formatDuration(startedAt: string | null, endedAt: string | null) {

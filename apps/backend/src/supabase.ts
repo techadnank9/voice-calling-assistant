@@ -244,6 +244,9 @@ export async function createOrder(params: {
   pickupTime: string;
   notes?: string;
   totalCents?: number;
+  isAdvanceOrder?: boolean;
+  advancePickupDate?: string;
+  advancePickupTime?: string;
   items: Array<{
     menuItemId?: string;
     customName?: string;
@@ -260,7 +263,10 @@ export async function createOrder(params: {
       pickup_time: params.pickupTime,
       notes: params.notes ?? null,
       total_cents: params.totalCents ?? 0,
-      status: 'new'
+      status: 'new',
+      is_advance_order: params.isAdvanceOrder ?? false,
+      advance_pickup_date: params.advancePickupDate ?? null,
+      advance_pickup_time: params.advancePickupTime ?? null
     })
     .select('id')
     .single();
@@ -442,6 +448,10 @@ function buildStructuredFromDataCollection(params: {
   const reservationDate = str('reservation_date') || 'today';
   const reservationTime = str('reservation_time') || '';
 
+  const isAdvanceOrder = bool('advance_order');
+  const advancePickupDate = str('advance_pickup_date');
+  const advancePickupTime = str('advance_pickup_time');
+
   const items = itemsText ? parseElevenLabsDcItems(itemsText, menuRows) : [];
   const totalCents = totalFromDc != null
     ? Math.round(totalFromDc * 100)
@@ -449,14 +459,15 @@ function buildStructuredFromDataCollection(params: {
 
   const indicatesOrder = callType === 'order' || bool('is_order') || items.length > 0;
   const indicatesReservation = callType === 'reservation' || bool('is_reservation');
+  const indicatesCancel = bool('order_cancelled');
 
   return {
     schema_version: '1.0',
     twilio_call_sid: twilioCallSid,
     provider,
     customer: { name: customerName, has_actual_name: hasActualName, caller_phone: callerPhone || null },
-    intents: { order: indicatesOrder, reservation: indicatesReservation },
-    order: { pickup_time: pickupTime, total_cents: totalCents, items },
+    intents: { order: indicatesOrder && !indicatesCancel, reservation: indicatesReservation, cancel: indicatesCancel },
+    order: { pickup_time: pickupTime, total_cents: totalCents, is_advance_order: isAdvanceOrder, advance_pickup_date: advancePickupDate, advance_pickup_time: advancePickupTime, items },
     reservation: {
       party_size: partySizeFromDc ?? 2,
       date: reservationDate,
@@ -607,10 +618,14 @@ export type StructuredCallOutcome = {
   intents: {
     order: boolean;
     reservation: boolean;
+    cancel: boolean;
   };
   order: {
     pickup_time: string;
     total_cents: number;
+    is_advance_order: boolean;
+    advance_pickup_date: string;
+    advance_pickup_time: string;
     items: Array<{ name: string; menuItemId?: string; customName?: string; qty: number; lineTotalCents: number; isCustom?: boolean }>;
   };
   reservation: {
@@ -631,7 +646,7 @@ export async function materializeFromStructuredOutput(
   const tag = `[auto:${twilioCallSid}]`;
   const { data: existingOrder } = await supabase
     .from('orders')
-    .select('id,customer_name,caller_phone')
+    .select('id,customer_name,caller_phone,status')
     .ilike('notes', `%${tag}%`)
     .limit(1)
     .maybeSingle();
@@ -681,6 +696,27 @@ export async function materializeFromStructuredOutput(
     }
   }
 
+  // Voice cancellation — customer said cancel during call
+  if (structured.intents.cancel && existingOrder) {
+    const now = new Date().toISOString();
+    await Promise.allSettled([
+      supabase.from('orders').update({
+        status: 'cancelled',
+        cancelled_at: now,
+        cancelled_reason: 'Customer cancelled during call'
+      }).eq('id', existingOrder.id),
+      supabase.from('order_audit_log').insert({
+        order_id: existingOrder.id,
+        action: 'order_cancelled',
+        changed_by: 'voice_agent',
+        old_values: { status: existingOrder.status ?? 'new' },
+        new_values: { status: 'cancelled' },
+        note: `Customer cancelled during call (${twilioCallSid})`
+      })
+    ]);
+    logger.info({ orderId: existingOrder.id, twilioCallSid }, 'Order cancelled by voice agent');
+  }
+
   if (structured.intents.order && !existingOrder) {
     // Use exact ElevenLabs transcript_summary when available; fall back to generated text.
     const generatedSummary = [
@@ -697,6 +733,9 @@ export async function materializeFromStructuredOutput(
       pickupTime: structured.order.pickup_time,
       notes: orderSummary,
       totalCents: structured.order.total_cents,
+      isAdvanceOrder: structured.order.is_advance_order,
+      advancePickupDate: structured.order.advance_pickup_date || undefined,
+      advancePickupTime: structured.order.advance_pickup_time || undefined,
       items: structured.order.items.map((item) => ({
         menuItemId: item.menuItemId,
         customName: item.customName ?? (item.isCustom ? item.name : undefined),
@@ -704,6 +743,23 @@ export async function materializeFromStructuredOutput(
         lineTotalCents: item.lineTotalCents
       }))
     });
+
+    // Log creation
+    const { data: newOrder } = await supabase.from('orders').select('id').ilike('notes', `%${tag}%`).limit(1).maybeSingle();
+    if (newOrder?.id) {
+      await supabase.from('order_audit_log').insert({
+        order_id: newOrder.id,
+        action: 'order_created',
+        changed_by: 'voice_agent',
+        new_values: {
+          customer: structured.customer.name,
+          items: structured.order.items.map((i) => `${i.qty}x ${i.name}`),
+          total_cents: structured.order.total_cents,
+          pickup_time: structured.order.pickup_time
+        },
+        note: `Created via ${structured.provider} call (${twilioCallSid})`
+      }).then(undefined, () => undefined);
+    }
 
     // Fire-and-forget SMS notifications. Promise.allSettled isolates failures.
     const { data: settings } = await supabase
@@ -823,7 +879,10 @@ function buildStructuredCallOutcome(params: {
   const totalCents =
     extractTotalCentsFromAssistantTranscript(finalReadback || assistantTranscript) ??
     items.reduce((sum, item) => sum + item.lineTotalCents, 0);
-  const indicatesOrder = transcript.includes('order') || items.length > 0;
+  const indicatesCancel =
+    transcript.includes('cancel my order') || transcript.includes('cancel the order') ||
+    transcript.includes('order is cancelled') || transcript.includes('order cancelled');
+  const indicatesOrder = (transcript.includes('order') || items.length > 0) && !indicatesCancel;
   const indicatesReservation =
     transcript.includes('reservation') || transcript.includes('reserve') || transcript.includes('table for');
 
@@ -855,11 +914,15 @@ function buildStructuredCallOutcome(params: {
     },
     intents: {
       order: indicatesOrder,
-      reservation: indicatesReservation
+      reservation: indicatesReservation,
+      cancel: indicatesCancel
     },
     order: {
       pickup_time: pickupTime,
       total_cents: totalCents,
+      is_advance_order: false,
+      advance_pickup_date: '',
+      advance_pickup_time: '',
       items
     },
     reservation: {

@@ -95,6 +95,23 @@ create table if not exists order_items (
 
 alter table order_items add column if not exists custom_name text;
 
+alter table orders add column if not exists is_advance_order boolean not null default false;
+alter table orders add column if not exists advance_pickup_date text;
+alter table orders add column if not exists advance_pickup_time text;
+alter table orders add column if not exists cancelled_at timestamptz;
+alter table orders add column if not exists cancelled_reason text;
+
+create table if not exists order_audit_log (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid references orders(id) on delete set null,
+  action text not null,
+  changed_by text not null default 'staff',
+  old_values jsonb,
+  new_values jsonb,
+  note text,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists reservations (
   id uuid primary key default gen_random_uuid(),
   caller_phone text,

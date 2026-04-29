@@ -401,10 +401,13 @@ export class DeepgramCallSession {
           has_actual_name: true,
           caller_phone: payload.caller_phone ?? null
         },
-        intents: { order: true, reservation: false },
+        intents: { order: true, reservation: false, cancel: false },
         order: {
           pickup_time: payload.pickup_time ?? '20 minutes',
           total_cents: payload.total_cents ?? 0,
+          is_advance_order: false,
+          advance_pickup_date: '',
+          advance_pickup_time: '',
           items: normalizedItems
         },
         reservation: {
@@ -454,10 +457,13 @@ export class DeepgramCallSession {
           has_actual_name: true,
           caller_phone: payload.caller_phone ?? null
         },
-        intents: { order: false, reservation: true },
+        intents: { order: false, reservation: true, cancel: false },
         order: {
           pickup_time: '20 minutes',
           total_cents: 0,
+          is_advance_order: false,
+          advance_pickup_date: '',
+          advance_pickup_time: '',
           items: []
         },
         reservation: {
