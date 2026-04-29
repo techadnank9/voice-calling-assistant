@@ -603,7 +603,7 @@ export default function HomePage() {
                         <th className="px-3 py-2">Time</th>
                         <th className="px-3 py-2">Items</th>
                         <th className="px-3 py-2">Total</th>
-                        <th className="px-3 py-2">Type</th>
+                        <th className="px-3 py-2">Status</th>
                         <th className="px-3 py-2">Duration</th>
                       </tr>
                     </thead>
@@ -633,15 +633,9 @@ export default function HomePage() {
                               <td className="px-3 py-3 text-indigo-600">{count} item{count === 1 ? '' : 's'}</td>
                               <td className="px-3 py-3 font-bold text-slate-900">${(order.total_cents / 100).toFixed(2)}</td>
                               <td className="px-3 py-3">
-                                {order.is_advance_order ? (
-                                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">
-                                    Advance
-                                  </span>
-                                ) : (
-                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                                    Pickup
-                                  </span>
-                                )}
+                                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusColor(order.status)}`}>
+                                  {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                </span>
                               </td>
                               <td className="px-3 py-3 text-slate-500">{duration}</td>
                             </tr>
@@ -685,9 +679,9 @@ export default function HomePage() {
                               </div>
                               <div className="mt-1 flex items-center gap-2">
                                 <p className="text-xs text-slate-500">Duration: {duration}</p>
-                                {order.is_advance_order && (
-                                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">Advance</span>
-                                )}
+                                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusColor(order.status)}`}>
+                                  {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                </span>
                               </div>
                             </button>
                           );
@@ -957,6 +951,15 @@ export default function HomePage() {
       )})() : null}
     </OpsShell>
   );
+}
+
+function statusColor(status: string) {
+  if (status === 'new')       return 'bg-sky-100 text-sky-700';
+  if (status === 'preparing') return 'bg-amber-100 text-amber-700';
+  if (status === 'ready')     return 'bg-emerald-100 text-emerald-700';
+  if (status === 'completed') return 'bg-slate-100 text-slate-600';
+  if (status === 'cancelled') return 'bg-red-100 text-red-600';
+  return 'bg-slate-100 text-slate-500';
 }
 
 function formatAuditAction(action: string) {
