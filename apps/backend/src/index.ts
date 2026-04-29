@@ -154,8 +154,8 @@ app.get('/health', (_req, res) => {
 });
 
 // ElevenLabs calls this at the start of every inbound call to get dynamic variables.
-// The agent's system prompt must contain {{current_time}} for substitution to work.
-app.post('/elevenlabs/initiation', (_req, res) => {
+// The agent's system prompt must contain {{current_time}} and {{caller_phone_number}} for substitution to work.
+app.post('/elevenlabs/initiation', (req, res) => {
   const now = new Date();
   const currentTime = now.toLocaleString('en-US', {
     timeZone: 'America/Los_Angeles',
@@ -163,9 +163,15 @@ app.post('/elevenlabs/initiation', (_req, res) => {
     minute: '2-digit',
     hour12: true
   });
+  // ElevenLabs sends caller_id, agent_id, called_number, call_sid in the request body
+  const body = req.body ?? {};
+  const callerPhone: string = (body.caller_id ?? body.from_number ?? '').toString().trim();
   res.json({
     type: 'conversation_initiation_client_data',
-    dynamic_variables: { current_time: currentTime }
+    dynamic_variables: {
+      current_time: currentTime,
+      caller_phone_number: callerPhone
+    }
   });
 });
 

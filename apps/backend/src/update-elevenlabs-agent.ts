@@ -57,7 +57,7 @@ const ADVANCE_ORDER_FIELDS = {
   }
 };
 
-const CURRENT_TIME_PREFIX = 'Current time: {{current_time}}\n\nWhen capturing pickup_time, always store an actual clock time (e.g. "3:30 PM"), not a relative duration. If the customer says "20 minutes" or "in half an hour", add that to the current time and store the result (e.g. if current time is 3:10 PM and customer says 20 minutes, store "3:30 PM").\n\n';
+const CURRENT_TIME_PREFIX = 'Current time: {{current_time}}. Caller phone: {{caller_phone_number}}.\n\nWhen capturing pickup_time, always store an actual clock time (e.g. "3:30 PM"), not a relative duration. If the customer says "20 minutes" or "in half an hour", add that to the current time and store the result (e.g. if current time is 3:10 PM and customer says 20 minutes, store "3:30 PM").\n\n';
 
 async function getAgent(): Promise<Record<string, unknown>> {
   const res = await fetch(`${BASE}/${ELEVENLABS_AGENT_ID}`, { headers: HEADERS });
