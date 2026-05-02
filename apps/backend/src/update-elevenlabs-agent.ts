@@ -34,7 +34,12 @@ const HEADERS = {
   'Content-Type': 'application/json'
 };
 
-const ADVANCE_ORDER_FIELDS = {
+const ADVANCE_ORDER_FIELDS: Record<string, { type: string; description: string }> = {
+  customer_name: {
+    type: 'string',
+    description:
+      'The name the customer gives during the conversation when asked. Use ONLY the name they speak — never use caller ID, phone metadata, or any system-provided label. Leave empty if the customer does not provide a name.'
+  },
   advance_order: {
     type: 'boolean',
     description:
@@ -55,7 +60,7 @@ const ADVANCE_ORDER_FIELDS = {
     description:
       'True if the customer explicitly cancelled their entire order during this call (said "cancel my order", "cancel everything", "never mind the whole thing", etc.). False by default.'
   }
-};
+} as const;
 
 const CURRENT_TIME_PREFIX = 'Current time: {{current_time}}. Caller phone: {{caller_phone_number}}.\n\nWhen capturing pickup_time, always store an actual clock time (e.g. "3:30 PM"), not a relative duration. If the customer says "20 minutes" or "in half an hour", add that to the current time and store the result (e.g. if current time is 3:10 PM and customer says 20 minutes, store "3:30 PM").\n\n';
 

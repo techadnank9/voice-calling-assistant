@@ -163,9 +163,15 @@ app.post('/elevenlabs/initiation', (req, res) => {
     minute: '2-digit',
     hour12: true
   });
-  // ElevenLabs sends caller_id, agent_id, called_number, call_sid in the request body
+  // ElevenLabs sends caller info in the request body — log full payload to diagnose field names
   const body = req.body ?? {};
-  const callerPhone: string = (body.caller_id ?? body.from_number ?? '').toString().trim();
+  const query = req.query ?? {};
+  logger.info({ initiationBody: body, initiationQuery: query }, 'ElevenLabs initiation webhook received');
+  // Try all known field locations: body fields, then query params
+  const callerPhone: string = (
+    body.caller_id ?? body.from_number ?? body.From ??
+    query['caller_id'] ?? query['from_number'] ?? ''
+  ).toString().trim();
   res.json({
     type: 'conversation_initiation_client_data',
     dynamic_variables: {
