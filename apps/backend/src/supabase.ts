@@ -10,6 +10,7 @@ import {
   inferNameFromMessages,
   parseElevenLabsDcItems
 } from './orderExtraction.js';
+import { sendOrderToClover } from './clover.js';
 import { sendCustomerOrderSms, sendRestaurantOrderSms } from './sms.js';
 
 export const supabase = createClient(
@@ -814,6 +815,19 @@ export async function materializeFromStructuredOutput(
         pickupTime: structured.order.pickup_time
       })
     ]);
+
+    // Fire-and-forget to Clover POS — failure must never block order creation.
+    sendOrderToClover({
+      customerName: structured.customer.name,
+      callerPhone: fromNumber ?? null,
+      pickupTime: structured.order.pickup_time,
+      totalCents: structured.order.total_cents,
+      items: structured.order.items.map((i) => ({
+        name: i.customName ?? i.name,
+        qty: i.qty,
+        lineTotalCents: i.lineTotalCents
+      }))
+    }).catch((e) => logger.error({ err: e }, 'Clover order push failed'));
   } else if (structured.intents.order && existingOrder && structured.order.items.length > 0) {
     // Order already exists (created by real-time Deepgram pass). If it has no items yet,
     // backfill them from the DC data — this is the common case where beverages/desserts
@@ -846,6 +860,19 @@ export async function materializeFromStructuredOutput(
             .eq('id', existingOrder.id)
         ).catch(() => undefined);
       }
+
+      // Fire-and-forget to Clover POS for backfilled orders.
+      sendOrderToClover({
+        customerName: structured.customer.name,
+        callerPhone: fromNumber ?? null,
+        pickupTime: structured.order.pickup_time,
+        totalCents: structured.order.total_cents,
+        items: structured.order.items.map((i) => ({
+          name: i.customName ?? i.name,
+          qty: i.qty,
+          lineTotalCents: i.lineTotalCents
+        }))
+      }).catch((e) => logger.error({ err: e }, 'Clover order push failed (backfill)'));
     }
   }
 
