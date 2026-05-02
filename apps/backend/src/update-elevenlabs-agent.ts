@@ -38,7 +38,7 @@ const ADVANCE_ORDER_FIELDS: Record<string, { type: string; description: string }
   customer_name: {
     type: 'string',
     description:
-      'The name the customer gives during the conversation when asked. Use ONLY the name they speak — never use caller ID, phone metadata, or any system-provided label. Leave empty if the customer does not provide a name.'
+      'The name the customer gives when asked during the call. Accept ANY name they provide — full names, first names only, nicknames, or initials like "K-D". Never use caller ID or phone metadata. Leave empty only if they explicitly refuse to give a name.'
   },
   advance_order: {
     type: 'boolean',
