@@ -19,6 +19,14 @@ const SCHEDULES: { id: string; time: string; label: string; note: string; color:
   { id: '1pm',  time: '1:00 PM',  label: 'Lunch service', note: 'Agent should accept normal order (lunch 11 AM–2:30 PM)',    color: 'emerald' }
 ];
 
+type ScheduleConfig = Record<string, { paused?: boolean }>;
+
+const DEFAULT_SCHEDULE_CONFIG: ScheduleConfig = {
+  '9am':  { paused: false },
+  '10am': { paused: false },
+  '1pm':  { paused: false }
+};
+
 type TestResult = {
   passed: boolean;
   durationMs: number;
@@ -27,8 +35,6 @@ type TestResult = {
   error?: string;
 };
 
-type ScheduleConfig = Record<string, { paused?: boolean }>;
-
 export default function TestsPage() {
   const [scenario, setScenario] = useState<ScenarioId>('chicken-biryani');
   const [overrideTime, setOverrideTime] = useState('');
@@ -36,7 +42,6 @@ export default function TestsPage() {
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState('');
 
-  // Schedule pause state
   const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({});
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
@@ -54,16 +59,29 @@ export default function TestsPage() {
 
   async function togglePause(scheduleId: string, currentlyPaused: boolean) {
     setTogglingId(scheduleId);
+    // Build the full updated config locally first — no read-merge race on server
+    const updatedConfig: ScheduleConfig = {
+      ...DEFAULT_SCHEDULE_CONFIG,
+      ...scheduleConfig,
+      [scheduleId]: { paused: !currentlyPaused }
+    };
+    // Optimistic update
+    setScheduleConfig(updatedConfig);
     try {
       const res = await fetch('/api/tests/schedules', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scheduleId, paused: !currentlyPaused })
+        body: JSON.stringify({ config: updatedConfig })
       });
       if (res.ok) {
         const data = await res.json() as { config: ScheduleConfig };
-        setScheduleConfig(data.config ?? {});
+        setScheduleConfig(data.config ?? updatedConfig);
+      } else {
+        // Revert on error
+        setScheduleConfig(scheduleConfig);
       }
+    } catch {
+      setScheduleConfig(scheduleConfig);
     } finally {
       setTogglingId(null);
     }
