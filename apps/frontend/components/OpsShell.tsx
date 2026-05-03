@@ -7,7 +7,7 @@ import { getBackendBaseUrl, getBackendLinkLabel } from '../lib/backend-link';
 import { RingoLogo } from './RingoLogo';
 
 type PageKey = 'overview' | 'orders' | 'calls' | 'reservations';
-type ExtendedPageKey = PageKey | 'reports' | 'earnings' | 'settings' | 'support';
+type ExtendedPageKey = PageKey | 'reports' | 'earnings' | 'settings' | 'support' | 'tests';
 
 export function OpsShell({ active, children }: { active: ExtendedPageKey; children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -114,6 +114,15 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
               >
                 Support
               </Link>
+              <Link
+                href="/moms/tests"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
+                  active === 'tests' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
+                }`}
+              >
+                Tests
+              </Link>
             </div>
           ) : null}
         </div>
@@ -146,6 +155,9 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'support' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
                 <Link href="/moms/support">Support</Link>
+              </li>
+              <li className={`rounded-xl px-3 py-2 ${active === 'tests' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
+                <Link href="/moms/tests">Tests</Link>
               </li>
             </ul>
             <div className="sticky bottom-0 mt-auto bg-white pb-2 pt-3">

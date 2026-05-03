@@ -10,16 +10,74 @@ import WebSocket from 'ws';
 import { env } from './config.js';
 import { logger } from './logger.js';
 
-/** Scripted user lines sent one after each agent response. */
-const ORDER_SCRIPT: string[] = [
-  "Hi, I'd like to place an order.",
-  'One Chicken Dum Biryani please.',
-  "That's all.",
-  'No food allergies.',
-  'Test User',   // name
-  'Yes',         // confirm phone
-  'Yes'          // confirm readback / order
-];
+export type ScenarioId =
+  | 'chicken-biryani'
+  | 'mutton-biryani'
+  | 'veg-order'
+  | 'multi-item'
+  | 'advance-order';
+
+export const SCENARIOS: Record<ScenarioId, { label: string; script: string[] }> = {
+  'chicken-biryani': {
+    label: 'Single item — Chicken Dum Biryani',
+    script: [
+      "Hi, I'd like to place an order.",
+      'One Chicken Dum Biryani please.',
+      "That's all.",
+      'No food allergies.',
+      'Test User',
+      'Yes',
+      'Yes'
+    ]
+  },
+  'mutton-biryani': {
+    label: 'Single item — Mutton Dum Biryani',
+    script: [
+      "Hi, I'd like to order a Mutton Dum Biryani.",
+      "That's it.",
+      'No allergies.',
+      'Test User',
+      'Yes',
+      'Yes'
+    ]
+  },
+  'veg-order': {
+    label: 'Veg order — Palak Paneer + Rice',
+    script: [
+      "Hi, can I order a Palak Paneer and a Basmati Rice?",
+      "That's all.",
+      'No food allergies.',
+      'Test User',
+      'Yes',
+      'Yes'
+    ]
+  },
+  'multi-item': {
+    label: 'Multi-item — Biryani + Lassi + Naan',
+    script: [
+      "Hi, I'd like to order a Chicken Dum Biryani, a Mango Lassi, and two Garlic Naans.",
+      "That's everything.",
+      'No allergies.',
+      'Test User',
+      'Yes',
+      'Yes'
+    ]
+  },
+  'advance-order': {
+    label: 'Advance order (outside hours)',
+    script: [
+      "Hi, I know you might be closed but I'd like to place an order for when you open.",
+      'One Chicken Dum Biryani.',
+      "That's all.",
+      'No allergies.',
+      'Test User',
+      'Yes',
+      'Yes'
+    ]
+  }
+};
+
+const DEFAULT_SCENARIO: ScenarioId = 'chicken-biryani';
 
 export type TestResult = {
   passed: boolean;
@@ -36,6 +94,8 @@ export async function runConversationTest(options?: {
   callerPhone?: string;
   /** Milliseconds to wait for conversation_ended before timing out. Default 120 000. */
   timeoutMs?: number;
+  /** Which scenario script to run. Defaults to chicken-biryani. */
+  scenario?: ScenarioId;
 }): Promise<TestResult> {
   const agentId = env.ELEVENLABS_AGENT_ID;
   const apiKey = env.ELEVENLABS_API_KEY;
@@ -52,6 +112,8 @@ export async function runConversationTest(options?: {
   const startMs = Date.now();
   const callerPhone = options?.callerPhone ?? '+15550001234';
   const timeoutMs = options?.timeoutMs ?? 120_000;
+  const scenarioId: ScenarioId = options?.scenario ?? DEFAULT_SCENARIO;
+  const script = SCENARIOS[scenarioId]?.script ?? SCENARIOS[DEFAULT_SCENARIO].script;
 
   return new Promise<TestResult>((resolve) => {
     const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}`;
@@ -124,8 +186,8 @@ export async function runConversationTest(options?: {
           transcript.push(`Agent: ${text}`);
           logger.debug({ text }, '[test] agent response');
 
-          if (scriptIdx < ORDER_SCRIPT.length) {
-            const line = ORDER_SCRIPT[scriptIdx++];
+          if (scriptIdx < script.length) {
+            const line = script[scriptIdx++];
             setTimeout(() => {
               if (settled) return;
               transcript.push(`User: ${line}`);

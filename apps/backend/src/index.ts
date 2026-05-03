@@ -163,7 +163,8 @@ app.post('/admin/run-test', async (req: Request, res: Response) => {
   }
   try {
     const overrideTime = typeof req.body?.override_time === 'string' ? req.body.override_time : undefined;
-    const result = await runConversationTest({ overrideTime });
+    const scenario = typeof req.body?.scenario === 'string' ? req.body.scenario : undefined;
+    const result = await runConversationTest({ overrideTime, scenario } as Parameters<typeof runConversationTest>[0]);
     logger.info({ passed: result.passed, durationMs: result.durationMs, conversationId: result.conversationId, error: result.error }, 'Scheduled conversation test completed');
     res.json(result);
   } catch (e) {
