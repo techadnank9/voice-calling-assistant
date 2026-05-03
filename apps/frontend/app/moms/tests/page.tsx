@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { OpsShell } from '../../../components/OpsShell';
 
 type ScenarioId = 'chicken-biryani' | 'mutton-biryani' | 'veg-order' | 'multi-item' | 'advance-order';
@@ -13,10 +13,10 @@ const SCENARIOS: { id: ScenarioId; label: string; description: string }[] = [
   { id: 'advance-order',   label: 'Advance Order',        description: 'Calls outside hours, requests advance order' }
 ];
 
-const SCHEDULES = [
-  { time: '9:00 AM', label: 'Before lunch', note: 'Agent should offer advance order (kitchen opens at 11 AM)', color: 'amber' },
-  { time: '10:00 AM', label: 'Before lunch', note: 'Agent should offer advance order (kitchen opens at 11 AM)', color: 'amber' },
-  { time: '1:00 PM', label: 'Lunch service', note: 'Agent should accept normal order (lunch 11 AM–2:30 PM)', color: 'emerald' }
+const SCHEDULES: { id: string; time: string; label: string; note: string; color: 'amber' | 'emerald' }[] = [
+  { id: '9am',  time: '9:00 AM',  label: 'Before lunch',  note: 'Agent should offer advance order (kitchen opens at 11 AM)', color: 'amber' },
+  { id: '10am', time: '10:00 AM', label: 'Before lunch',  note: 'Agent should offer advance order (kitchen opens at 11 AM)', color: 'amber' },
+  { id: '1pm',  time: '1:00 PM',  label: 'Lunch service', note: 'Agent should accept normal order (lunch 11 AM–2:30 PM)',    color: 'emerald' }
 ];
 
 type TestResult = {
@@ -27,12 +27,47 @@ type TestResult = {
   error?: string;
 };
 
+type ScheduleConfig = Record<string, { paused?: boolean }>;
+
 export default function TestsPage() {
   const [scenario, setScenario] = useState<ScenarioId>('chicken-biryani');
   const [overrideTime, setOverrideTime] = useState('');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState('');
+
+  // Schedule pause state
+  const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({});
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const loadScheduleConfig = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tests/schedules');
+      if (res.ok) {
+        const data = await res.json() as { config: ScheduleConfig };
+        setScheduleConfig(data.config ?? {});
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { loadScheduleConfig(); }, [loadScheduleConfig]);
+
+  async function togglePause(scheduleId: string, currentlyPaused: boolean) {
+    setTogglingId(scheduleId);
+    try {
+      const res = await fetch('/api/tests/schedules', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduleId, paused: !currentlyPaused })
+      });
+      if (res.ok) {
+        const data = await res.json() as { config: ScheduleConfig };
+        setScheduleConfig(data.config ?? {});
+      }
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   async function runTest() {
     setRunning(true);
@@ -47,7 +82,7 @@ export default function TestsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      const data: TestResult & { error?: string } = await res.json();
+      const data = await res.json() as TestResult & { error?: string };
       if (!res.ok) {
         setError(data.error ?? `Request failed (${res.status})`);
       } else {
@@ -126,9 +161,7 @@ export default function TestsPage() {
                   <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   Running…
                 </span>
-              ) : (
-                'Run Test'
-              )}
+              ) : 'Run Test'}
             </button>
             {running && (
               <p className="text-sm text-slate-500">
@@ -160,23 +193,18 @@ export default function TestsPage() {
                   {result.conversationId}
                 </span>
               )}
-              {result.error && (
-                <span className="text-sm text-red-700">{result.error}</span>
-              )}
+              {result.error && <span className="text-sm text-red-700">{result.error}</span>}
             </div>
 
             {result.transcript.length > 0 && (
               <div className="mt-4">
                 <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">Transcript</p>
                 <div className="space-y-1.5 rounded-xl bg-slate-50 p-3 text-sm max-h-96 overflow-y-auto">
-                  {result.transcript.map((line, i) => {
-                    const isAgent = line.startsWith('Agent:');
-                    return (
-                      <p key={i} className={`${isAgent ? 'text-slate-800' : 'text-cyan-800 font-medium'}`}>
-                        {line}
-                      </p>
-                    );
-                  })}
+                  {result.transcript.map((line, i) => (
+                    <p key={i} className={line.startsWith('Agent:') ? 'text-slate-800' : 'text-cyan-800 font-medium'}>
+                      {line}
+                    </p>
+                  ))}
                 </div>
               </div>
             )}
@@ -189,18 +217,48 @@ export default function TestsPage() {
         <h2 className="text-lg font-bold tracking-tight text-slate-900">Scheduled Daily Tests</h2>
         <p className="mt-1 text-sm text-slate-500">
           Three tests run automatically every day using the <span className="font-medium">Chicken Dum Biryani</span> scenario.
-          Managed by the Claude Code scheduler — results appear in Railway logs.
+          Pause individual schedules to skip them temporarily.
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          {SCHEDULES.map(s => (
-            <div key={s.time} className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xl font-bold text-slate-900">{s.time} PT</p>
-              <p className={`mt-1 text-xs font-semibold ${s.color === 'emerald' ? 'text-emerald-700' : 'text-amber-700'}`}>
-                {s.label}
-              </p>
-              <p className="mt-2 text-xs text-slate-500">{s.note}</p>
-            </div>
-          ))}
+          {SCHEDULES.map(s => {
+            const paused = scheduleConfig[s.id]?.paused ?? false;
+            const toggling = togglingId === s.id;
+            return (
+              <div
+                key={s.id}
+                className={`rounded-xl border p-4 transition ${paused ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 bg-white'}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xl font-bold text-slate-900">{s.time} PT</p>
+                    <p className={`mt-1 text-xs font-semibold ${s.color === 'emerald' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {s.label}
+                    </p>
+                  </div>
+                  {/* Pause / Resume toggle */}
+                  <button
+                    type="button"
+                    onClick={() => togglePause(s.id, paused)}
+                    disabled={toggling}
+                    title={paused ? 'Resume schedule' : 'Pause schedule'}
+                    className={`mt-0.5 flex-shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${
+                      paused
+                        ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                        : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                    }`}
+                  >
+                    {toggling ? '…' : paused ? '▶ Resume' : '⏸ Pause'}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">{s.note}</p>
+                {paused && (
+                  <p className="mt-2 rounded-lg bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">
+                    Paused — skipping daily run
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
         <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
           <strong>How to check results:</strong> Railway dashboard → backend service → Logs → search for <code className="bg-white rounded px-1 text-xs">Scheduled conversation test completed</code>
@@ -214,7 +272,7 @@ export default function TestsPage() {
           <li className="flex gap-2"><span className="text-slate-400">•</span> Use <strong>Override Time = 9:00 AM</strong> to test before-hours behavior without waiting.</li>
           <li className="flex gap-2"><span className="text-slate-400">•</span> Use <strong>Override Time = 1:00 PM</strong> to test normal lunch-service ordering.</li>
           <li className="flex gap-2"><span className="text-slate-400">•</span> Test orders from <code className="bg-slate-100 rounded px-1 text-xs">+15550001234</code> — safely ignore any orders created in Supabase from that number.</li>
-          <li className="flex gap-2"><span className="text-slate-400">•</span> If transcript shows literal <code className="bg-slate-100 rounded px-1 text-xs">{"{{caller_phone_number}}"}</code> — the initiation webhook is down. Re-run <code className="bg-slate-100 rounded px-1 text-xs">update-elevenlabs-agent.ts</code>.</li>
+          <li className="flex gap-2"><span className="text-slate-400">•</span> If transcript shows literal <code className="bg-slate-100 rounded px-1 text-xs">{'{{caller_phone_number}}'}</code> — the initiation webhook is down.</li>
         </ul>
       </section>
     </OpsShell>

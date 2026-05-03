@@ -17,6 +17,7 @@ import { env, missingVars } from './config.js';
 import { DeepgramCallSession } from './deepgramSession.js';
 import { logger } from './logger.js';
 import {
+  supabase,
   insertEvent,
   persistFallbackOrderAndReservationFromCall,
   reconcileStaleInProgressCalls,
@@ -164,6 +165,23 @@ app.post('/admin/run-test', async (req: Request, res: Response) => {
   try {
     const overrideTime = typeof req.body?.override_time === 'string' ? req.body.override_time : undefined;
     const scenario = typeof req.body?.scenario === 'string' ? req.body.scenario : undefined;
+    const scheduleId = typeof req.body?.schedule_id === 'string' ? req.body.schedule_id : undefined;
+
+    // Check if this schedule is paused in restaurant_settings
+    if (scheduleId) {
+      const { data: settings } = await supabase
+        .from('restaurant_settings')
+        .select('test_schedule_config')
+        .limit(1)
+        .maybeSingle();
+      const config = (settings?.test_schedule_config as Record<string, { paused?: boolean }> | null) ?? {};
+      if (config[scheduleId]?.paused === true) {
+        logger.info({ scheduleId }, 'Test skipped — schedule is paused');
+        res.json({ passed: true, skipped: true, durationMs: 0, transcript: [], scheduleId });
+        return;
+      }
+    }
+
     const result = await runConversationTest({ overrideTime, scenario } as Parameters<typeof runConversationTest>[0]);
     logger.info({ passed: result.passed, durationMs: result.durationMs, conversationId: result.conversationId, error: result.error }, 'Scheduled conversation test completed');
     res.json(result);
