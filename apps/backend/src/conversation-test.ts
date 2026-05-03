@@ -186,6 +186,22 @@ export async function runConversationTest(options?: {
           transcript.push(`Agent: ${text}`);
           logger.debug({ text }, '[test] agent response');
 
+          // Detect closing line — agent says goodbye and ends call.
+          // Close the WebSocket so we don't wait for conversation_ended.
+          const lower = text.toLowerCase();
+          const isClosing =
+            lower.includes('have a great day') ||
+            lower.includes('pickup will be ready') ||
+            lower.includes('thank you for calling') ||
+            lower.includes('thanks for calling') ||
+            lower.includes('goodbye') ||
+            lower.includes('have a wonderful');
+          if (isClosing) {
+            logger.debug('[test] detected closing line — ending conversation');
+            setTimeout(() => finish(true), 800);
+            return;
+          }
+
           if (scriptIdx < script.length) {
             const line = script[scriptIdx++];
             setTimeout(() => {
@@ -193,6 +209,9 @@ export async function runConversationTest(options?: {
               transcript.push(`User: ${line}`);
               ws.send(JSON.stringify({ type: 'user_message', user_message: line }));
             }, 1200);
+          } else {
+            // Script exhausted — wait briefly then close (agent may still be wrapping up)
+            setTimeout(() => finish(true), 8000);
           }
         }
         return;
