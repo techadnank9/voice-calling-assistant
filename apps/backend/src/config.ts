@@ -21,6 +21,7 @@ const envSchema = z.object({
   TWILIO_WHATSAPP_FROM: z.string().optional(), // e.g. whatsapp:+14155238886 (sandbox) or whatsapp:+1XXX (production)
   CLOVER_MERCHANT_ID: z.string().optional(),
   CLOVER_API_TOKEN: z.string().optional(),
+  TEST_SECRET: z.string().optional(),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   LOG_LEVEL: z.string().default('info')
@@ -52,6 +53,7 @@ export const env: Env = result.success
       TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM,
       CLOVER_MERCHANT_ID: process.env.CLOVER_MERCHANT_ID,
       CLOVER_API_TOKEN: process.env.CLOVER_API_TOKEN,
+      TEST_SECRET: process.env.TEST_SECRET,
       SUPABASE_URL: process.env.SUPABASE_URL ?? '',
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
       LOG_LEVEL: process.env.LOG_LEVEL ?? 'info'

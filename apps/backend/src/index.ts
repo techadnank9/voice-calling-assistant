@@ -25,6 +25,7 @@ import {
   notifyUserActivity,
   closeCall
 } from './supabase.js';
+import { runConversationTest } from './conversation-test.js';
 
 const app = express();
 app.use(pinoHttp.default({ logger }));
@@ -151,6 +152,24 @@ app.get('/health', (_req, res) => {
     return;
   }
   res.json({ ok: true, service: 'voice-calling-assistant-backend' });
+});
+
+// Scheduled automated conversation test — called by daily cron at 9 AM, 10 AM, 1 PM PT.
+app.post('/admin/run-test', async (req: Request, res: Response) => {
+  const secret = req.header('x-test-secret');
+  if (!env.TEST_SECRET || secret !== env.TEST_SECRET) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const overrideTime = typeof req.body?.override_time === 'string' ? req.body.override_time : undefined;
+    const result = await runConversationTest({ overrideTime });
+    logger.info({ passed: result.passed, durationMs: result.durationMs, conversationId: result.conversationId, error: result.error }, 'Scheduled conversation test completed');
+    res.json(result);
+  } catch (e) {
+    logger.error({ err: e }, 'Conversation test endpoint error');
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 // ElevenLabs calls this at the start of every inbound call to get dynamic variables.
