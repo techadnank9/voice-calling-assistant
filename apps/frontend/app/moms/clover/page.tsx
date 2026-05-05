@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { OpsShell } from '../../../components/OpsShell';
-import { createClient } from '../../../lib/supabase-browser';
+import { createClient } from '../../../lib/supabase-client';
 
 type CloverOrder = {
   id: string;
