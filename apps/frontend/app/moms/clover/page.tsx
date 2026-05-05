@@ -24,19 +24,19 @@ const BUSINESSES: { key: BusinessKey; label: string; merchantId: string; dashboa
     key: 'llc',
     label: 'Moms Biryani LLC',
     merchantId: '5649FD1WY6X11',
-    dashboardUrl: 'https://clover.com/r/5649FD1WY6X11'
+    dashboardUrl: 'https://clover.com/home'
   },
   {
     key: 'biryani',
     label: "Mom's Biryani",
     merchantId: '234AJE2PC8Q11',
-    dashboardUrl: 'https://clover.com/r/234AJE2PC8Q11'
+    dashboardUrl: 'https://clover.com/home'
   },
   {
     key: 'bistro',
     label: 'Moms Bistro',
     merchantId: 'BEGG2S74H6QW1',
-    dashboardUrl: 'https://clover.com/r/BEGG2S74H6QW1'
+    dashboardUrl: 'https://clover.com/home'
   }
 ];
 
@@ -84,8 +84,8 @@ export default function CloverPage() {
     pending: orders.filter(o => !o.clover_status).length,
   };
 
-  function cloverOrderUrl(orderId: string) {
-    return `https://clover.com/r/${activeBusiness.merchantId}/orders/${orderId}`;
+  function cloverOrderUrl(_orderId: string) {
+    return `https://clover.com/home`;
   }
 
   return (
