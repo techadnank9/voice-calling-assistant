@@ -35,8 +35,8 @@ const BUSINESSES: { key: BusinessKey; label: string; merchantId: string; dashboa
   {
     key: 'bistro',
     label: 'Moms Bistro',
-    merchantId: '',
-    dashboardUrl: 'https://clover.com'
+    merchantId: 'BEGG2S74H6QW1',
+    dashboardUrl: 'https://clover.com/r/BEGG2S74H6QW1'
   }
 ];
 
