@@ -16,6 +16,7 @@ import {
 import { env, missingVars } from './config.js';
 import { DeepgramCallSession } from './deepgramSession.js';
 import { logger } from './logger.js';
+import { sendOrderToClover } from './clover.js';
 import {
   supabase,
   insertEvent,
@@ -156,6 +157,27 @@ app.get('/health', (_req, res) => {
 });
 
 // Scheduled automated conversation test — called by daily cron at 9 AM, 10 AM, 1 PM PT.
+app.post('/admin/clover-test', async (req: Request, res: Response) => {
+  const secret = req.header('x-test-secret');
+  if (!env.TEST_SECRET || secret !== env.TEST_SECRET) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const result = await sendOrderToClover({
+      customerName: 'Test User',
+      callerPhone: '+15550001234',
+      pickupTime: '1:20 PM',
+      totalCents: 1600,
+      items: [{ name: 'Chicken Dum Biryani', qty: 1, lineTotalCents: 1600 }]
+    });
+    logger.info({ result }, 'Clover test order result');
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
 app.post('/admin/run-test', async (req: Request, res: Response) => {
   const secret = req.header('x-test-secret');
   if (!env.TEST_SECRET || secret !== env.TEST_SECRET) {
