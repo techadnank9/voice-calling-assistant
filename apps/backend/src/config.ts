@@ -18,7 +18,17 @@ const envSchema = z.object({
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_FROM: z.string().optional(),
-  TWILIO_WHATSAPP_FROM: z.string().optional(), // e.g. whatsapp:+14155238886 (sandbox) or whatsapp:+1XXX (production)
+  TWILIO_WHATSAPP_FROM: z.string().optional(),
+  // Clover — Mom's Biryani (Sunnyvale, MID: 234AJE2PC8Q11)
+  CLOVER_BIRYANI_MERCHANT_ID: z.string().optional(),
+  CLOVER_BIRYANI_API_TOKEN: z.string().optional(),
+  // Clover — Moms Bistro
+  CLOVER_BISTRO_MERCHANT_ID: z.string().optional(),
+  CLOVER_BISTRO_API_TOKEN: z.string().optional(),
+  // Clover — Moms Biryani LLC
+  CLOVER_BIRYANI_LLC_MERCHANT_ID: z.string().optional(),
+  CLOVER_BIRYANI_LLC_API_TOKEN: z.string().optional(),
+  // Legacy fallback (kept for backward compat)
   CLOVER_MERCHANT_ID: z.string().optional(),
   CLOVER_API_TOKEN: z.string().optional(),
   TEST_SECRET: z.string().optional(),
@@ -51,6 +61,12 @@ export const env: Env = result.success
       TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
       TWILIO_FROM: process.env.TWILIO_FROM,
       TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM,
+      CLOVER_BIRYANI_MERCHANT_ID: process.env.CLOVER_BIRYANI_MERCHANT_ID,
+      CLOVER_BIRYANI_API_TOKEN: process.env.CLOVER_BIRYANI_API_TOKEN,
+      CLOVER_BISTRO_MERCHANT_ID: process.env.CLOVER_BISTRO_MERCHANT_ID,
+      CLOVER_BISTRO_API_TOKEN: process.env.CLOVER_BISTRO_API_TOKEN,
+      CLOVER_BIRYANI_LLC_MERCHANT_ID: process.env.CLOVER_BIRYANI_LLC_MERCHANT_ID,
+      CLOVER_BIRYANI_LLC_API_TOKEN: process.env.CLOVER_BIRYANI_LLC_API_TOKEN,
       CLOVER_MERCHANT_ID: process.env.CLOVER_MERCHANT_ID,
       CLOVER_API_TOKEN: process.env.CLOVER_API_TOKEN,
       TEST_SECRET: process.env.TEST_SECRET,

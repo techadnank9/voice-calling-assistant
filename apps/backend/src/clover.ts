@@ -1,8 +1,16 @@
 import { env } from './config.js';
 import { logger } from './logger.js';
 
+function getCredentials() {
+  // Prefer specific Biryani vars, fall back to legacy generic vars
+  const merchantId = env.CLOVER_BIRYANI_MERCHANT_ID || env.CLOVER_MERCHANT_ID;
+  const apiToken   = env.CLOVER_BIRYANI_API_TOKEN   || env.CLOVER_API_TOKEN;
+  return { merchantId, apiToken };
+}
+
 function isConfigured(): boolean {
-  return Boolean(env.CLOVER_MERCHANT_ID && env.CLOVER_API_TOKEN);
+  const { merchantId, apiToken } = getCredentials();
+  return Boolean(merchantId && apiToken);
 }
 
 export type CloverResult =
@@ -18,9 +26,10 @@ export async function sendOrderToClover(params: {
 }): Promise<CloverResult> {
   if (!isConfigured()) return { ok: false, error: 'not_configured' };
 
-  const base = `https://api.clover.com/v3/merchants/${env.CLOVER_MERCHANT_ID}`;
+  const { merchantId, apiToken } = getCredentials();
+  const base = `https://api.clover.com/v3/merchants/${merchantId}`;
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${env.CLOVER_API_TOKEN}`,
+    Authorization: `Bearer ${apiToken}`,
     'Content-Type': 'application/json'
   };
 
