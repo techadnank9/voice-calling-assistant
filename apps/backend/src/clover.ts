@@ -51,21 +51,28 @@ export async function sendOrderToClover(params: {
   if (!orderRes.ok) throw new Error(`Clover create order failed: ${order?.message ?? orderRes.status}`);
   if (!order.id) throw new Error('Clover create order: no id in response');
 
-  // 2. Add line items
+  // 2. Add line items — one API call per unit so qty is never ambiguous
   for (const item of params.items) {
     const unitPrice = item.qty > 0 ? Math.round(item.lineTotalCents / item.qty) : item.lineTotalCents;
-    const lineRes = await fetch(`${base}/orders/${order.id}/line_items`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        name: item.name,
-        price: unitPrice,
-        unitQty: item.qty * 1000
-      })
-    });
-    if (!lineRes.ok) {
-      const lineErr = await lineRes.json().catch(() => ({})) as { message?: string };
-      logger.warn({ cloverOrderId: order.id, item: item.name, status: lineRes.status, err: lineErr?.message }, 'Clover line item add failed');
+    const units = item.qty > 0 ? item.qty : 1;
+    for (let i = 0; i < units; i++) {
+      const lineRes = await fetch(`${base}/orders/${order.id}/line_items`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: item.name,
+          price: unitPrice,
+          unitQty: 1000,
+          isRevenue: true
+        })
+      });
+      if (!lineRes.ok) {
+        const lineErr = await lineRes.json().catch(() => ({})) as { message?: string };
+        logger.warn({ cloverOrderId: order.id, item: item.name, status: lineRes.status, err: lineErr?.message }, 'Clover line item add failed');
+      } else {
+        const lineData = await lineRes.json().catch(() => ({})) as { id?: string };
+        logger.debug({ cloverOrderId: order.id, lineItemId: lineData.id, item: item.name, unitPrice }, 'Clover line item added');
+      }
     }
   }
 
