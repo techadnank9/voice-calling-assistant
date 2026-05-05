@@ -1,0 +1,94 @@
+{
+  "actions": 0,
+  "capabilities": 3072,
+  "classType": [
+    "llm"
+  ],
+  "description": "A component that connects to Alibaba Cloud's Qwen large language models via the \nDashScope API. It supports tasks such as text generation, summarization, question \nanswering, and chat-based interactions. With access to models like Qwen Plus \nand Qwen Flash, this component enables high-quality, context-aware responses. Configurable \nwith API keys, it allows seamless integration into AI-driven workflows with scalable \nperformance.",
+  "icon": "qwen.svg",
+  "input": [
+    {
+      "lane": "questions",
+      "output": [
+        {
+          "lane": "answers"
+        }
+      ]
+    }
+  ],
+  "lanes": {
+    "questions": [
+      "answers"
+    ]
+  },
+  "Pipe": {
+    "schema": {
+      "properties": {
+        "apikey": {
+          "description": "Enter your API key or token",
+          "title": "API key (Token)",
+          "type": "string"
+        },
+        "model": {
+          "default": "qwen-plus",
+          "description": "LLM model",
+          "enum": [
+            "qwen-plus",
+            "qwen-flash"
+          ],
+          "title": "Model",
+          "type": "string"
+        },
+        "region": {
+          "default": "us",
+          "description": "DashScope regional endpoint. API keys are not interchangeable between regions.",
+          "enum": [
+            "us",
+            "intl",
+            "cn"
+          ],
+          "title": "Region",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "region",
+        "apikey"
+      ],
+      "title": "Qwen",
+      "type": "object"
+    },
+    "ui": {
+      "apikey": {
+        "ui:secure": true,
+        "ui:widget": "ApiKeyWidget"
+      },
+      "model": {
+        "ui:enumNames": [
+          "Qwen Plus",
+          "Qwen Flash"
+        ]
+      },
+      "region": {
+        "ui:enumNames": [
+          "US (Virginia)",
+          "Singapore",
+          "China (Beijing)"
+        ]
+      },
+      "ui:order": [
+        "model",
+        "region",
+        "apikey"
+      ]
+    }
+  },
+  "plans": null,
+  "prefix": "llm",
+  "protocol": "llm_qwen://",
+  "tile": [
+    "Model: ${parameters.llm_qwen.model}"
+  ],
+  "title": "Qwen"
+}

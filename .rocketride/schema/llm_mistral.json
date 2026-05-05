@@ -1,0 +1,550 @@
+{
+  "actions": 0,
+  "capabilities": 3072,
+  "classType": [
+    "llm"
+  ],
+  "description": "A component that connects to Mistral AI's advanced language models for natural language processing. \nSupports a wide range of models from large (256K context) to small (32K context), including specialized \nmodels for reasoning and technical tasks. Features high-quality chat completions with robust error handling \nand automatic token management.",
+  "documentation": "https://bit.ly/3X7t1wC",
+  "icon": "mistral.svg",
+  "input": [
+    {
+      "lane": "questions",
+      "output": [
+        {
+          "lane": "answers"
+        }
+      ]
+    }
+  ],
+  "lanes": {
+    "questions": [
+      "answers"
+    ]
+  },
+  "Pipe": {
+    "schema": {
+      "dependencies": {
+        "profile": {
+          "oneOf": [
+            {
+              "properties": {
+                "custom": {
+                  "object": "custom",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    },
+                    "model": {
+                      "description": "Mistral AI model",
+                      "title": "Model",
+                      "type": "string"
+                    },
+                    "modelTotalTokens": {
+                      "description": "Maximum context length in tokens",
+                      "title": "Tokens",
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "modelTotalTokens",
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "custom"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "mistral-large": {
+                  "object": "mistral-large",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "mistral-large"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "mistral-medium": {
+                  "object": "mistral-medium",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "mistral-medium"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "mistral-small": {
+                  "object": "mistral-small",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "mistral-small"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "codestral": {
+                  "object": "codestral",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "codestral"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "magistral-medium": {
+                  "object": "magistral-medium",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "magistral-medium"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "magistral-small": {
+                  "object": "magistral-small",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "magistral-small"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "devstral-medium": {
+                  "object": "devstral-medium",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "devstral-medium"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "devstral-small": {
+                  "object": "devstral-small",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "devstral-small"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "ministral-14b": {
+                  "object": "ministral-14b",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "ministral-14b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "ministral-8b": {
+                  "object": "ministral-8b",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "ministral-8b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "ministral-3b": {
+                  "object": "ministral-3b",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "ministral-3b"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "properties": {
+        "profile": {
+          "default": "mistral-large",
+          "description": "Mistral AI model selection",
+          "enum": [
+            "custom",
+            "mistral-large",
+            "mistral-medium",
+            "mistral-small",
+            "magistral-medium",
+            "magistral-small",
+            "devstral-medium",
+            "devstral-small",
+            "ministral-14b",
+            "ministral-8b",
+            "ministral-3b",
+            "codestral"
+          ],
+          "title": "Model",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "Mistral AI",
+      "type": "object"
+    },
+    "ui": {
+      "codestral": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "custom": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "model": {},
+        "modelTotalTokens": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "model",
+          "modelTotalTokens",
+          "apikey"
+        ]
+      },
+      "devstral-medium": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "devstral-small": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "magistral-medium": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "magistral-small": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "ministral-14b": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "ministral-3b": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "ministral-8b": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "mistral-large": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "mistral-medium": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "mistral-small": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "profile": {
+        "ui:enumNames": [
+          "Custom Model",
+          "Mistral Large 3",
+          "Mistral Medium 3.1",
+          "Mistral Small 3.2",
+          "Magistral Medium 1.2",
+          "Magistral Small 1.2",
+          "Devstral Medium 1.0",
+          "Devstral Small 1.1",
+          "Ministral 3 14B",
+          "Ministral 3 8B",
+          "Ministral 3 3B",
+          "Codestral"
+        ]
+      },
+      "ui:order": [
+        "profile",
+        "custom",
+        "mistral-large",
+        "mistral-medium",
+        "mistral-small",
+        "codestral",
+        "magistral-medium",
+        "magistral-small",
+        "devstral-medium",
+        "devstral-small",
+        "ministral-14b",
+        "ministral-8b",
+        "ministral-3b"
+      ]
+    }
+  },
+  "plans": null,
+  "prefix": "llm",
+  "protocol": "llm_mistral://",
+  "tile": [
+    "Model: ${parameters.llm_mistral.profile}"
+  ],
+  "title": "Mistral AI"
+}

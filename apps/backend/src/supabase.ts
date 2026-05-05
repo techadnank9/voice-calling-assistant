@@ -827,7 +827,19 @@ export async function materializeFromStructuredOutput(
         qty: i.qty,
         lineTotalCents: i.lineTotalCents
       }))
-    }).catch((e) => logger.error({ err: e }, 'Clover order push failed'));
+    }).then((result) => {
+      if (!newOrder?.id) return;
+      if (result.ok) {
+        supabase.from('orders').update({ clover_order_id: result.cloverOrderId, clover_status: 'sent' }).eq('id', newOrder.id).then(undefined, () => undefined);
+      } else if (result.error !== 'not_configured') {
+        supabase.from('orders').update({ clover_status: 'failed', clover_error: result.error }).eq('id', newOrder.id).then(undefined, () => undefined);
+      }
+    }).catch((e) => {
+      logger.error({ err: e }, 'Clover order push failed');
+      if (newOrder?.id) {
+        supabase.from('orders').update({ clover_status: 'failed', clover_error: String(e?.message ?? e) }).eq('id', newOrder.id).then(undefined, () => undefined);
+      }
+    });
   } else if (structured.intents.order && existingOrder && structured.order.items.length > 0) {
     // Order already exists (created by real-time Deepgram pass). If it has no items yet,
     // backfill them from the DC data — this is the common case where beverages/desserts
@@ -872,7 +884,19 @@ export async function materializeFromStructuredOutput(
           qty: i.qty,
           lineTotalCents: i.lineTotalCents
         }))
-      }).catch((e) => logger.error({ err: e }, 'Clover order push failed (backfill)'));
+      }).then((result) => {
+        if (!existingOrder?.id) return;
+        if (result.ok) {
+          supabase.from('orders').update({ clover_order_id: result.cloverOrderId, clover_status: 'sent' }).eq('id', existingOrder.id).then(undefined, () => undefined);
+        } else if (result.error !== 'not_configured') {
+          supabase.from('orders').update({ clover_status: 'failed', clover_error: result.error }).eq('id', existingOrder.id).then(undefined, () => undefined);
+        }
+      }).catch((e) => {
+        logger.error({ err: e }, 'Clover order push failed (backfill)');
+        if (existingOrder?.id) {
+          supabase.from('orders').update({ clover_status: 'failed', clover_error: String(e?.message ?? e) }).eq('id', existingOrder.id).then(undefined, () => undefined);
+        }
+      });
     }
   }
 

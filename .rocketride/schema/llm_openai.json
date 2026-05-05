@@ -1,0 +1,394 @@
+{
+  "actions": 0,
+  "capabilities": 3072,
+  "classType": [
+    "llm"
+  ],
+  "description": "A component that connects to OpenAI's latest GPT models for advanced natural language \nprocessing. It supports tasks such as text generation, summarization, question \nanswering, and chat-based interactions. With access to state-of-the-art language \nmodels like GPT-5, GPT-4o, GPT-4o-mini, and GPT-4 Turbo, this component enables \nhigh-quality, context-aware responses and creative text generation. Configurable with \nAPI keys and deployment options, it allows seamless integration into AI-driven \nworkflows with scalable performance and enhanced multimodal capabilities.",
+  "documentation": "https://bit.ly/47jkQmV",
+  "icon": "openai.svg",
+  "input": [
+    {
+      "lane": "questions",
+      "output": [
+        {
+          "lane": "answers"
+        }
+      ]
+    }
+  ],
+  "lanes": {
+    "questions": [
+      "answers"
+    ]
+  },
+  "Pipe": {
+    "schema": {
+      "dependencies": {
+        "profile": {
+          "oneOf": [
+            {
+              "properties": {
+                "custom": {
+                  "object": "custom",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    },
+                    "model": {
+                      "description": "OpenAI model",
+                      "title": "Model",
+                      "type": "string"
+                    },
+                    "modelTotalTokens": {
+                      "description": "Total Tokens",
+                      "title": "Tokens",
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "modelTotalTokens",
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "custom"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "openai-4o": {
+                  "object": "openai-4o",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "openai-4o"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "openai-4o-mini": {
+                  "object": "openai-4o-mini",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "openai-4o-mini"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "openai-5": {
+                  "object": "openai-5",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "openai-5"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "openai-5-1": {
+                  "object": "openai-5-1",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "openai-5-1"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "openai-5-2": {
+                  "object": "openai-5-2",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "openai-5-2"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "openai-5-mini": {
+                  "object": "openai-5-mini",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "openai-5-mini"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "openai-5-nano": {
+                  "object": "openai-5-nano",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "openai-5-nano"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "properties": {
+        "profile": {
+          "default": "openai-5-2",
+          "description": "LLM model",
+          "enum": [
+            "custom",
+            "openai-4o",
+            "openai-4o-mini",
+            "openai-5",
+            "openai-5-1",
+            "openai-5-2",
+            "openai-5-mini",
+            "openai-5-nano"
+          ],
+          "title": "Model",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "OpenAI",
+      "type": "object"
+    },
+    "ui": {
+      "custom": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "model": {},
+        "modelTotalTokens": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "model",
+          "modelTotalTokens",
+          "apikey"
+        ]
+      },
+      "openai-4o": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "openai-4o-mini": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "openai-5": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "openai-5-1": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "openai-5-2": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "openai-5-mini": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "openai-5-nano": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "profile": {
+        "ui:enumNames": [
+          null,
+          "GPT-4o",
+          "GPT-4o-mini",
+          "GPT-5",
+          "GPT-5.1",
+          "GPT-5.2",
+          "GPT-5-mini",
+          "GPT-5-nano"
+        ]
+      },
+      "ui:order": [
+        "profile",
+        "custom",
+        "openai-4o",
+        "openai-4o-mini",
+        "openai-5",
+        "openai-5-1",
+        "openai-5-2",
+        "openai-5-mini",
+        "openai-5-nano"
+      ]
+    }
+  },
+  "plans": null,
+  "prefix": "llm",
+  "protocol": "llm_openai://",
+  "tile": [
+    "Model: ${parameters.llm_openai.profile}"
+  ],
+  "title": "OpenAI"
+}

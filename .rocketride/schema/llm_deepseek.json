@@ -1,0 +1,440 @@
+{
+  "actions": 0,
+  "capabilities": 3072,
+  "classType": [
+    "llm"
+  ],
+  "description": "A component that connects to DeepSeek’s large language models for advanced \nnatural language processing. It enables capabilities like text generation, \nsummarization, and code understanding. Optimized for technical domains, DeepSeek \noffers strong performance in handling programming-related queries, structured \ndata, and domain-specific tasks. The component is suitable for integrating \nintelligent reasoning and content generation into pipelines where accuracy and \ndomain adaptation are key.",
+  "documentation": "https://bit.ly/4oQN2DK",
+  "icon": "deepseek.svg",
+  "input": [
+    {
+      "lane": "questions",
+      "output": [
+        {
+          "lane": "answers"
+        }
+      ]
+    }
+  ],
+  "lanes": {
+    "questions": [
+      "answers"
+    ]
+  },
+  "Pipe": {
+    "schema": {
+      "dependencies": {
+        "profile": {
+          "oneOf": [
+            {
+              "properties": {
+                "cloud-reasoner": {
+                  "object": "cloud-reasoner",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "cloud-reasoner"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "cloud-chat": {
+                  "object": "cloud-chat",
+                  "properties": {
+                    "apikey": {
+                      "description": "Enter your API key or token",
+                      "title": "API key (Token)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apikey"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "cloud-chat"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "deepseek-r1-1_5b": {
+                  "object": "deepseek-r1-1_5b",
+                  "properties": {
+                    "serverbase": {
+                      "default": "http://localhost:11434/v1",
+                      "description": "Base url the model is hosted under.",
+                      "title": "LLM URL",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "serverbase"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "deepseek-r1-1_5b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "deepseek-r1-7b": {
+                  "object": "deepseek-r1-7b",
+                  "properties": {
+                    "serverbase": {
+                      "default": "http://localhost:11434/v1",
+                      "description": "Base url the model is hosted under.",
+                      "title": "LLM URL",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "serverbase"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "deepseek-r1-7b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "deepseek-r1-8b": {
+                  "object": "deepseek-r1-8b",
+                  "properties": {
+                    "serverbase": {
+                      "default": "http://localhost:11434/v1",
+                      "description": "Base url the model is hosted under.",
+                      "title": "LLM URL",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "serverbase"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "deepseek-r1-8b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "deepseek-r1-14b": {
+                  "object": "deepseek-r1-14b",
+                  "properties": {
+                    "serverbase": {
+                      "default": "http://localhost:11434/v1",
+                      "description": "Base url the model is hosted under.",
+                      "title": "LLM URL",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "serverbase"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "deepseek-r1-14b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "deepseek-r1-32b": {
+                  "object": "deepseek-r1-32b",
+                  "properties": {
+                    "serverbase": {
+                      "default": "http://localhost:11434/v1",
+                      "description": "Base url the model is hosted under.",
+                      "title": "LLM URL",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "serverbase"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "deepseek-r1-32b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "deepseek-r1-70b": {
+                  "object": "deepseek-r1-70b",
+                  "properties": {
+                    "serverbase": {
+                      "default": "http://localhost:11434/v1",
+                      "description": "Base url the model is hosted under.",
+                      "title": "LLM URL",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "serverbase"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "deepseek-r1-70b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "deepseek-r1-671b": {
+                  "object": "deepseek-r1-671b",
+                  "properties": {
+                    "serverbase": {
+                      "default": "http://localhost:11434/v1",
+                      "description": "Base url the model is hosted under.",
+                      "title": "LLM URL",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "serverbase"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "deepseek-r1-671b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "deepseek-v3": {
+                  "object": "deepseek-v3",
+                  "properties": {
+                    "serverbase": {
+                      "default": "http://localhost:11434/v1",
+                      "description": "Base url the model is hosted under.",
+                      "title": "LLM URL",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "serverbase"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "deepseek-v3"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "properties": {
+        "profile": {
+          "default": "cloud-reasoner",
+          "description": "Deepseek LLM model",
+          "enum": [
+            "cloud-chat",
+            "cloud-reasoner",
+            "deepseek-r1-14b",
+            "deepseek-r1-1_5b",
+            "deepseek-r1-32b",
+            "deepseek-r1-671b",
+            "deepseek-r1-70b",
+            "deepseek-r1-7b",
+            "deepseek-r1-8b",
+            "deepseek-v3"
+          ],
+          "title": "Model",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "Deepseek",
+      "type": "object"
+    },
+    "ui": {
+      "cloud-chat": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "cloud-reasoner": {
+        "apikey": {
+          "ui:secure": true,
+          "ui:widget": "ApiKeyWidget"
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "apikey"
+        ]
+      },
+      "deepseek-r1-14b": {
+        "serverbase": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "serverbase"
+        ]
+      },
+      "deepseek-r1-1_5b": {
+        "serverbase": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "serverbase"
+        ]
+      },
+      "deepseek-r1-32b": {
+        "serverbase": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "serverbase"
+        ]
+      },
+      "deepseek-r1-671b": {
+        "serverbase": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "serverbase"
+        ]
+      },
+      "deepseek-r1-70b": {
+        "serverbase": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "serverbase"
+        ]
+      },
+      "deepseek-r1-7b": {
+        "serverbase": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "serverbase"
+        ]
+      },
+      "deepseek-r1-8b": {
+        "serverbase": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "serverbase"
+        ]
+      },
+      "deepseek-v3": {
+        "serverbase": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "serverbase"
+        ]
+      },
+      "profile": {
+        "ui:enumNames": [
+          "Cloud Chat",
+          "Cloud Reasoner",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "ui:order": [
+        "profile",
+        "cloud-reasoner",
+        "cloud-chat",
+        "deepseek-r1-1_5b",
+        "deepseek-r1-7b",
+        "deepseek-r1-8b",
+        "deepseek-r1-14b",
+        "deepseek-r1-32b",
+        "deepseek-r1-70b",
+        "deepseek-r1-671b",
+        "deepseek-v3"
+      ]
+    }
+  },
+  "plans": null,
+  "prefix": "llm",
+  "protocol": "llm_deepseek://",
+  "tile": [
+    "Model: ${parameters.llm_deepseek.profile}"
+  ],
+  "title": "Deepseek"
+}

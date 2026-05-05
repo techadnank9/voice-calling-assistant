@@ -1,0 +1,1153 @@
+{
+  "actions": 0,
+  "capabilities": 3072,
+  "classType": [
+    "llm"
+  ],
+  "description": "A component that integrates with Googles models for natural \nlanguage understanding and generation. It enables tasks such as \nsummarization, question answering, content generation, and conversational \nAI. Configurable with model selection and prompt settings, the component \nprovides access to Vertex extensive suite of models with advanced language \ncapabilities.",
+  "documentation": "https://bit.ly/4kTTxD4",
+  "icon": "vertex.svg",
+  "input": [
+    {
+      "lane": "questions",
+      "output": [
+        {
+          "lane": "answers"
+        }
+      ]
+    }
+  ],
+  "lanes": {
+    "questions": [
+      "answers"
+    ]
+  },
+  "Pipe": {
+    "schema": {
+      "dependencies": {
+        "profile": {
+          "oneOf": [
+            {
+              "properties": {
+                "custom": {
+                  "description": "For custom/non-Gemini models, enter fully-qualified ID from the list of supported models in VertexAI (e.g., meta/llama-3.1-8b-instruct-maas, claude-3-5-sonnet@20240620).",
+                  "object": "custom",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "model": {
+                      "description": "For custom/non-Gemini models, enter fully-qualified ID from the list of supported models in VertexAI (e.g., meta/llama-3.1-8b-instruct-maas, claude-3-5-sonnet@20240620).",
+                      "title": "Model",
+                      "type": "string"
+                    },
+                    "modelTotalTokens": {
+                      "description": "Total Tokens",
+                      "title": "Tokens",
+                      "type": "number"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "modelTotalTokens",
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "custom"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemini-3-pro": {
+                  "object": "gemini-3-pro",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemini-3-pro"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemini-2_5-pro": {
+                  "object": "gemini-2_5-pro",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemini-2_5-pro"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemini-2_5-flash": {
+                  "object": "gemini-2_5-flash",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemini-2_5-flash"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemini-2_5-flash-lite": {
+                  "object": "gemini-2_5-flash-lite",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemini-2_5-flash-lite"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemini-2_0-flash": {
+                  "object": "gemini-2_0-flash",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemini-2_0-flash"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemini-2_0-flash-lite": {
+                  "object": "gemini-2_0-flash-lite",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemini-2_0-flash-lite"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "claude-opus-4-5": {
+                  "object": "claude-opus-4-5",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "claude-opus-4-5"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "claude-sonnet-4-5": {
+                  "object": "claude-sonnet-4-5",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "claude-sonnet-4-5"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "claude-haiku-4-5": {
+                  "object": "claude-haiku-4-5",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "claude-haiku-4-5"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "claude-3-5-haiku": {
+                  "object": "claude-3-5-haiku",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "claude-3-5-haiku"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemma-3-1b": {
+                  "object": "gemma-3-1b",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemma-3-1b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemma-3-4b": {
+                  "object": "gemma-3-4b",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemma-3-4b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemma-3-12b": {
+                  "object": "gemma-3-12b",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemma-3-12b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "gemma-3-27b": {
+                  "object": "gemma-3-27b",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "gemma-3-27b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "llama-4-maverick": {
+                  "object": "llama-4-maverick",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "llama-4-maverick"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "llama-4-scout": {
+                  "object": "llama-4-scout",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "llama-4-scout"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "llama3-3": {
+                  "object": "llama3-3",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "llama3-3"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "llama-3-2-90b": {
+                  "object": "llama-3-2-90b",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "llama-3-2-90b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "llama-3-1-405b": {
+                  "object": "llama-3-1-405b",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "llama-3-1-405b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "llama-3-1-70b": {
+                  "object": "llama-3-1-70b",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "llama-3-1-70b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "llama-3-1-8b": {
+                  "object": "llama-3-1-8b",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "llama-3-1-8b"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "deepseek-r1": {
+                  "object": "deepseek-r1",
+                  "properties": {
+                    "location": {
+                      "description": "LLM server location",
+                      "title": "Location",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "LLM project or organization name",
+                      "title": "Project (Organization)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "location"
+                  ],
+                  "type": "object"
+                },
+                "profile": {
+                  "enum": [
+                    "deepseek-r1"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "properties": {
+        "parameters": {
+          "object": "parameters",
+          "properties": {
+            "adminEmail": {
+              "description": "Enter the email address of a Google Workspace administrator.\n\nThis email should belong to a user with administrative privileges in your Google Workspace domain.",
+              "title": "Administrator E-mail",
+              "type": "string"
+            },
+            "authType": {
+              "default": "service",
+              "title": "Authentication Type",
+              "type": "string"
+            },
+            "customerId": {
+              "description": "Enter your Google Workspace Customer ID.\n\nThis unique identifier is assigned to your organization by Google. It is used to specify the particular Google Workspace domain you want to manage.",
+              "title": "Customer ID",
+              "type": "string"
+            },
+            "serviceKey": {
+              "description": "Upload the JSON key file for your Google Workspace service account.\n\nThis file contains the credentials necessary to authenticate API requests.",
+              "format": "data-url",
+              "title": "Service Account Key File",
+              "type": "string"
+            }
+          },
+          "required": [
+            "authType",
+            "customerId",
+            "adminEmail",
+            "serviceKey"
+          ],
+          "type": "object"
+        },
+        "profile": {
+          "default": "gemini-2_5-flash",
+          "description": "LLM model",
+          "enum": [
+            "claude-3-5-haiku",
+            "claude-haiku-4-5",
+            "claude-opus-4-5",
+            "claude-sonnet-4-5",
+            "custom",
+            "deepseek-r1",
+            "gemini-2_0-flash",
+            "gemini-2_0-flash-lite",
+            "gemini-2_5-flash",
+            "gemini-2_5-flash-lite",
+            "gemini-2_5-pro",
+            "gemini-3-pro",
+            "gemma-3-12b",
+            "gemma-3-1b",
+            "gemma-3-27b",
+            "gemma-3-4b",
+            "llama-3-1-405b",
+            "llama-3-1-70b",
+            "llama-3-1-8b",
+            "llama-3-2-90b",
+            "llama-4-maverick",
+            "llama-4-scout",
+            "llama3-3"
+          ],
+          "title": "Model",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "VertexAI",
+      "type": "object"
+    },
+    "ui": {
+      "claude-3-5-haiku": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "claude-haiku-4-5": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "claude-opus-4-5": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "claude-sonnet-4-5": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "custom": {
+        "location": {},
+        "model": {},
+        "modelTotalTokens": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "model",
+          "modelTotalTokens",
+          "project",
+          "location"
+        ]
+      },
+      "deepseek-r1": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemini-2_0-flash": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemini-2_0-flash-lite": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemini-2_5-flash": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemini-2_5-flash-lite": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemini-2_5-pro": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemini-3-pro": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemma-3-12b": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemma-3-1b": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemma-3-27b": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "gemma-3-4b": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "llama-3-1-405b": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "llama-3-1-70b": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "llama-3-1-8b": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "llama-3-2-90b": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "llama-4-maverick": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "llama-4-scout": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "llama3-3": {
+        "location": {},
+        "project": {},
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "project",
+          "location"
+        ]
+      },
+      "parameters": {
+        "adminEmail": {},
+        "authType": {
+          "ui:widget": "hidden"
+        },
+        "customerId": {},
+        "serviceKey": {
+          "ui:options": {
+            "accept": ".json"
+          }
+        },
+        "ui:options": {
+          "label": false,
+          "nonNestedDisplay": true
+        },
+        "ui:order": [
+          "authType",
+          "customerId",
+          "adminEmail",
+          "serviceKey"
+        ]
+      },
+      "profile": {
+        "ui:enumNames": [
+          null,
+          "Claude Haiku 4.5",
+          "Claude Opus 4.5",
+          "Claude Sonnet 4.5",
+          "Custom",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Gemini 3 Pro",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "ui:order": [
+        "parameters",
+        "profile",
+        "custom",
+        "gemini-3-pro",
+        "gemini-2_5-pro",
+        "gemini-2_5-flash",
+        "gemini-2_5-flash-lite",
+        "gemini-2_0-flash",
+        "gemini-2_0-flash-lite",
+        "claude-opus-4-5",
+        "claude-sonnet-4-5",
+        "claude-haiku-4-5",
+        "claude-3-5-haiku",
+        "gemma-3-1b",
+        "gemma-3-4b",
+        "gemma-3-12b",
+        "gemma-3-27b",
+        "llama-4-maverick",
+        "llama-4-scout",
+        "llama3-3",
+        "llama-3-2-90b",
+        "llama-3-1-405b",
+        "llama-3-1-70b",
+        "llama-3-1-8b",
+        "deepseek-r1"
+      ]
+    }
+  },
+  "plans": [
+    "enterprise"
+  ],
+  "prefix": "llm",
+  "protocol": "llm_vertex-enterprise://",
+  "tile": [
+    "Model: ${parameters.llm_vertex.profile}"
+  ],
+  "title": "VertexAI (Enterprise)"
+}

@@ -1,0 +1,43 @@
+{
+  "actions": 0,
+  "capabilities": 2048,
+  "classType": [
+    "text"
+  ],
+  "description": "A processing component that analyzes documents to extract a dictionary of \nkey terms and phrases. It identifies domain-specific vocabulary, recurring \nexpressions, and relevant terminology, building a structured list for downstream \nenrichment or reference. Useful for creating glossaries, supporting classification, \nor enhancing search relevance, the component helps surface important language patterns \nfrom unstructured content.",
+  "documentation": "https://bit.ly/49xdBJx",
+  "icon": "dictionary.svg",
+  "input": [
+    {
+      "lane": "text",
+      "output": [
+        {
+          "description": "Outputs a series of documents, each one containing a dictionary item.",
+          "lane": "documents"
+        }
+      ]
+    }
+  ],
+  "invoke": {
+    "llm": {
+      "description": "LLM to use for Dictionary creation",
+      "min": 1
+    }
+  },
+  "lanes": {
+    "text": [
+      "documents"
+    ]
+  },
+  "Pipe": {
+    "schema": {
+      "title": "Dictionary",
+      "type": "object"
+    },
+    "ui": {}
+  },
+  "plans": null,
+  "prefix": "Dictionary",
+  "protocol": "dictionary://",
+  "title": "Dictionary"
+}

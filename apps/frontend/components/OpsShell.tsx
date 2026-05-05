@@ -7,7 +7,7 @@ import { getBackendBaseUrl, getBackendLinkLabel } from '../lib/backend-link';
 import { RingoLogo } from './RingoLogo';
 
 type PageKey = 'overview' | 'orders' | 'calls' | 'reservations';
-type ExtendedPageKey = PageKey | 'reports' | 'earnings' | 'settings' | 'support' | 'tests';
+type ExtendedPageKey = PageKey | 'reports' | 'earnings' | 'settings' | 'support' | 'tests' | 'clover';
 
 export function OpsShell({ active, children }: { active: ExtendedPageKey; children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -123,6 +123,15 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
               >
                 Tests
               </Link>
+              <Link
+                href="/moms/clover"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
+                  active === 'clover' ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600'
+                }`}
+              >
+                Clover POS
+              </Link>
             </div>
           ) : null}
         </div>
@@ -158,6 +167,9 @@ export function OpsShell({ active, children }: { active: ExtendedPageKey; childr
               </li>
               <li className={`rounded-xl px-3 py-2 ${active === 'tests' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
                 <Link href="/moms/tests">Tests</Link>
+              </li>
+              <li className={`rounded-xl px-3 py-2 ${active === 'clover' ? 'bg-slate-100 font-semibold text-slate-900' : ''}`}>
+                <Link href="/moms/clover">Clover POS</Link>
               </li>
             </ul>
             <div className="sticky bottom-0 mt-auto bg-white pb-2 pt-3">

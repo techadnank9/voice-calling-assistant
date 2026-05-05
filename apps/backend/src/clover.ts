@@ -5,14 +5,18 @@ function isConfigured(): boolean {
   return Boolean(env.CLOVER_MERCHANT_ID && env.CLOVER_API_TOKEN);
 }
 
+export type CloverResult =
+  | { ok: true; cloverOrderId: string }
+  | { ok: false; error: string };
+
 export async function sendOrderToClover(params: {
   customerName: string;
   callerPhone: string | null;
   pickupTime: string;
   totalCents: number;
   items: Array<{ name: string; qty: number; lineTotalCents: number }>;
-}): Promise<void> {
-  if (!isConfigured()) return;
+}): Promise<CloverResult> {
+  if (!isConfigured()) return { ok: false, error: 'not_configured' };
 
   const base = `https://api.clover.com/v3/merchants/${env.CLOVER_MERCHANT_ID}`;
   const headers: Record<string, string> = {
@@ -60,4 +64,6 @@ export async function sendOrderToClover(params: {
     { cloverOrderId: order.id, customerName: params.customerName, itemCount: params.items.length },
     'Order sent to Clover'
   );
+
+  return { ok: true, cloverOrderId: order.id };
 }

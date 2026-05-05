@@ -1,0 +1,56 @@
+{
+  "actions": 0,
+  "capabilities": 2048,
+  "classType": [
+    "image"
+  ],
+  "description": "A processing component that creates thumbnails from input images. It resizes \nand optimizes images for quick previews or compact storage, preserving aspect \nratio and visual clarity.",
+  "documentation": "https://bit.ly/4hG9Pjh",
+  "icon": "thumbnail.svg",
+  "input": [
+    {
+      "description": "Image data to thumbnail",
+      "lane": "image",
+      "output": [
+        {
+          "description": "Thumbnailed image as document with metadata",
+          "lane": "documents"
+        },
+        {
+          "description": "Thumbnailed image data",
+          "lane": "image"
+        }
+      ]
+    },
+    {
+      "description": "Image documents to thumbnail",
+      "lane": "documents",
+      "output": [
+        {
+          "description": "Thumbnailed image documents with original metadata preserved",
+          "lane": "documents"
+        }
+      ]
+    }
+  ],
+  "lanes": {
+    "documents": [
+      "documents"
+    ],
+    "image": [
+      "documents",
+      "image"
+    ]
+  },
+  "Pipe": {
+    "schema": {
+      "title": "Thumbnail",
+      "type": "object"
+    },
+    "ui": {}
+  },
+  "plans": null,
+  "prefix": "Thumbnail",
+  "protocol": "thumbnail://",
+  "title": "Thumbnail"
+}
