@@ -830,14 +830,14 @@ export async function materializeFromStructuredOutput(
     }).then((result) => {
       if (!newOrder?.id) return;
       if (result.ok) {
-        supabase.from('orders').update({ clover_order_id: result.cloverOrderId, clover_status: 'sent' }).eq('id', newOrder.id).then(undefined, () => undefined);
+        supabase.from('orders').update({ clover_order_id: result.cloverOrderId, clover_status: 'sent', clover_business: 'llc' }).eq('id', newOrder.id).then(undefined, () => undefined);
       } else if (result.error !== 'not_configured') {
-        supabase.from('orders').update({ clover_status: 'failed', clover_error: result.error }).eq('id', newOrder.id).then(undefined, () => undefined);
+        supabase.from('orders').update({ clover_status: 'failed', clover_error: result.error, clover_business: 'llc' }).eq('id', newOrder.id).then(undefined, () => undefined);
       }
     }).catch((e) => {
       logger.error({ err: e }, 'Clover order push failed');
       if (newOrder?.id) {
-        supabase.from('orders').update({ clover_status: 'failed', clover_error: String(e?.message ?? e) }).eq('id', newOrder.id).then(undefined, () => undefined);
+        supabase.from('orders').update({ clover_status: 'failed', clover_error: String(e?.message ?? e), clover_business: 'llc' }).eq('id', newOrder.id).then(undefined, () => undefined);
       }
     });
   } else if (structured.intents.order && existingOrder && structured.order.items.length > 0) {
@@ -887,14 +887,14 @@ export async function materializeFromStructuredOutput(
       }).then((result) => {
         if (!existingOrder?.id) return;
         if (result.ok) {
-          supabase.from('orders').update({ clover_order_id: result.cloverOrderId, clover_status: 'sent' }).eq('id', existingOrder.id).then(undefined, () => undefined);
+          supabase.from('orders').update({ clover_order_id: result.cloverOrderId, clover_status: 'sent', clover_business: 'llc' }).eq('id', existingOrder.id).then(undefined, () => undefined);
         } else if (result.error !== 'not_configured') {
-          supabase.from('orders').update({ clover_status: 'failed', clover_error: result.error }).eq('id', existingOrder.id).then(undefined, () => undefined);
+          supabase.from('orders').update({ clover_status: 'failed', clover_error: result.error, clover_business: 'llc' }).eq('id', existingOrder.id).then(undefined, () => undefined);
         }
       }).catch((e) => {
         logger.error({ err: e }, 'Clover order push failed (backfill)');
         if (existingOrder?.id) {
-          supabase.from('orders').update({ clover_status: 'failed', clover_error: String(e?.message ?? e) }).eq('id', existingOrder.id).then(undefined, () => undefined);
+          supabase.from('orders').update({ clover_status: 'failed', clover_error: String(e?.message ?? e), clover_business: 'llc' }).eq('id', existingOrder.id).then(undefined, () => undefined);
         }
       });
     }

@@ -13,6 +13,7 @@ type CloverOrder = {
   clover_order_id: string | null;
   clover_status: string | null;
   clover_error: string | null;
+  clover_business: string | null;
   created_at: string;
   is_advance_order: boolean;
 };
@@ -60,16 +61,18 @@ export default function CloverPage() {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('orders')
-      .select('id, customer_name, caller_phone, pickup_time, total_cents, clover_order_id, clover_status, clover_error, created_at, is_advance_order')
+      .select('id, customer_name, caller_phone, pickup_time, total_cents, clover_order_id, clover_status, clover_error, clover_business, created_at, is_advance_order')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(200);
     if (!error && data) setOrders(data as CloverOrder[]);
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const filtered = orders.filter(o => {
+  const businessOrders = orders.filter(o => o.clover_business === business || (!o.clover_business && business === 'llc'));
+
+  const filtered = businessOrders.filter(o => {
     if (filter === 'all') return true;
     if (filter === 'sent') return o.clover_status === 'sent';
     if (filter === 'failed') return o.clover_status === 'failed';
@@ -78,10 +81,10 @@ export default function CloverPage() {
   });
 
   const counts = {
-    all: orders.length,
-    sent: orders.filter(o => o.clover_status === 'sent').length,
-    failed: orders.filter(o => o.clover_status === 'failed').length,
-    pending: orders.filter(o => !o.clover_status).length,
+    all: businessOrders.length,
+    sent: businessOrders.filter(o => o.clover_status === 'sent').length,
+    failed: businessOrders.filter(o => o.clover_status === 'failed').length,
+    pending: businessOrders.filter(o => !o.clover_status).length,
   };
 
   function cloverOrderUrl(_orderId: string) {
