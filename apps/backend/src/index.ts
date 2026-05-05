@@ -193,6 +193,11 @@ app.post('/admin/run-test', async (req: Request, res: Response) => {
 
 // ElevenLabs calls this at the start of every inbound call to get dynamic variables.
 // The agent's system prompt must contain {{current_time}} and {{caller_phone_number}} for substitution to work.
+// Phone numbers that should be rejected immediately (spammers / robocallers)
+const BLOCKLIST = new Set([
+  '+12062024567'
+]);
+
 app.post('/elevenlabs/initiation', (req, res) => {
   const now = new Date();
   const currentTime = now.toLocaleString('en-US', {
@@ -210,11 +215,18 @@ app.post('/elevenlabs/initiation', (req, res) => {
     body.caller_id ?? body.from_number ?? body.From ??
     query['caller_id'] ?? query['from_number'] ?? ''
   ).toString().trim();
+
+  const isBlocked = BLOCKLIST.has(callerPhone);
+  if (isBlocked) {
+    logger.info({ callerPhone }, 'Blocked caller — injecting caller_blocked=true');
+  }
+
   res.json({
     type: 'conversation_initiation_client_data',
     dynamic_variables: {
       current_time: currentTime,
-      caller_phone_number: callerPhone
+      caller_phone_number: callerPhone,
+      caller_blocked: isBlocked ? 'true' : 'false'
     }
   });
 });
