@@ -2,9 +2,9 @@ import { env } from './config.js';
 import { logger } from './logger.js';
 
 function getCredentials() {
-  // Prefer specific Biryani vars, fall back to legacy generic vars
-  const merchantId = env.CLOVER_BIRYANI_MERCHANT_ID || env.CLOVER_MERCHANT_ID;
-  const apiToken   = env.CLOVER_BIRYANI_API_TOKEN   || env.CLOVER_API_TOKEN;
+  // Active business: Moms Biryani LLC
+  const merchantId = env.CLOVER_BIRYANI_LLC_MERCHANT_ID || env.CLOVER_MERCHANT_ID;
+  const apiToken   = env.CLOVER_BIRYANI_LLC_API_TOKEN   || env.CLOVER_API_TOKEN;
   return { merchantId, apiToken };
 }
 
