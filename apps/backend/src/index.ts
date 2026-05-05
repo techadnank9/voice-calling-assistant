@@ -168,13 +168,34 @@ app.post('/admin/clover-test', async (req: Request, res: Response) => {
     const itemName = typeof item === 'string' ? item : 'Chicken Dum Biryani';
     const itemQty = typeof qty === 'number' ? qty : 1;
     const itemPrice = typeof price === 'number' ? price : 1600;
+    const totalCents = itemPrice * itemQty;
+
+    // Insert a Supabase order record so it shows on the Clover POS page
+    const { data: newOrder } = await supabase.from('orders').insert({
+      customer_name: 'Test User',
+      caller_phone: '+15550001234',
+      pickup_time: '1:20 PM',
+      total_cents: totalCents,
+      clover_business: 'llc'
+    }).select('id').single();
+
     const result = await sendOrderToClover({
       customerName: 'Test User',
       callerPhone: '+15550001234',
       pickupTime: '1:20 PM',
-      totalCents: itemPrice * itemQty,
-      items: [{ name: itemName, qty: itemQty, lineTotalCents: itemPrice * itemQty }]
+      totalCents,
+      items: [{ name: itemName, qty: itemQty, lineTotalCents: totalCents }]
     });
+
+    // Update order with Clover result
+    if (newOrder?.id) {
+      if (result.ok) {
+        await supabase.from('orders').update({ clover_order_id: result.cloverOrderId, clover_status: 'sent', clover_business: 'llc' }).eq('id', newOrder.id);
+      } else {
+        await supabase.from('orders').update({ clover_status: 'failed', clover_error: result.error, clover_business: 'llc' }).eq('id', newOrder.id);
+      }
+    }
+
     logger.info({ result }, 'Clover test order result');
     res.json(result);
   } catch (e) {
