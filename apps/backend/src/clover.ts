@@ -76,8 +76,19 @@ export async function sendOrderToClover(params: {
     }
   }
 
+  // 3. Set order total explicitly (Clover doesn't always auto-sum API line items)
+  const totalRes = await fetch(`${base}/orders/${order.id}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ total: params.totalCents })
+  });
+  if (!totalRes.ok) {
+    const totalErr = await totalRes.json().catch(() => ({})) as { message?: string };
+    logger.warn({ cloverOrderId: order.id, status: totalRes.status, err: totalErr?.message }, 'Clover order total update failed');
+  }
+
   logger.info(
-    { cloverOrderId: order.id, customerName: params.customerName, itemCount: params.items.length },
+    { cloverOrderId: order.id, customerName: params.customerName, itemCount: params.items.length, totalCents: params.totalCents },
     'Order sent to Clover'
   );
 
