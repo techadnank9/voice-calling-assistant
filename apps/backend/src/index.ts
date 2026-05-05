@@ -164,12 +164,16 @@ app.post('/admin/clover-test', async (req: Request, res: Response) => {
     return;
   }
   try {
+    const { item, qty, price } = req.body ?? {};
+    const itemName = typeof item === 'string' ? item : 'Chicken Dum Biryani';
+    const itemQty = typeof qty === 'number' ? qty : 1;
+    const itemPrice = typeof price === 'number' ? price : 1600;
     const result = await sendOrderToClover({
       customerName: 'Test User',
       callerPhone: '+15550001234',
       pickupTime: '1:20 PM',
-      totalCents: 1600,
-      items: [{ name: 'Chicken Dum Biryani', qty: 1, lineTotalCents: 1600 }]
+      totalCents: itemPrice * itemQty,
+      items: [{ name: itemName, qty: itemQty, lineTotalCents: itemPrice * itemQty }]
     });
     logger.info({ result }, 'Clover test order result');
     res.json(result);
