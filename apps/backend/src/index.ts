@@ -184,6 +184,18 @@ app.post('/admin/clover-create-employee', async (req: Request, res: Response) =>
   res.json(await r.json());
 });
 
+app.get('/admin/clover-devices', async (req: Request, res: Response) => {
+  const secret = req.header('x-test-secret');
+  if (!env.TEST_SECRET || secret !== env.TEST_SECRET) { res.status(401).json({ error: 'unauthorized' }); return; }
+  const merchantId = env.CLOVER_BIRYANI_LLC_MERCHANT_ID;
+  const apiToken = env.CLOVER_BIRYANI_LLC_API_TOKEN;
+  if (!merchantId || !apiToken) { res.status(400).json({ error: 'not_configured' }); return; }
+  const r = await fetch(`https://api.clover.com/v3/merchants/${merchantId}/devices`, {
+    headers: { Authorization: `Bearer ${apiToken}` }
+  });
+  res.json(await r.json());
+});
+
 app.get('/admin/clover-order-types', async (req: Request, res: Response) => {
   const secret = req.header('x-test-secret');
   if (!env.TEST_SECRET || secret !== env.TEST_SECRET) { res.status(401).json({ error: 'unauthorized' }); return; }
