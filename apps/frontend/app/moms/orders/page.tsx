@@ -17,6 +17,8 @@ type Order = {
   is_advance_order?: boolean | null;
   advance_pickup_date?: string | null;
   advance_pickup_time?: string | null;
+  clover_order_id?: string | null;
+  clover_status?: string | null;
 };
 
 const backendUrl = getBackendBaseUrl(process.env.NEXT_PUBLIC_BACKEND_BASE_URL);
@@ -92,7 +94,7 @@ export default function HomePage() {
     const load = async () => {
       const { data: ordersData } = await client
         .from('orders')
-        .select('id,caller_phone,customer_name,pickup_time,status,total_cents,created_at,notes,is_advance_order,advance_pickup_date,advance_pickup_time')
+        .select('id,caller_phone,customer_name,pickup_time,status,total_cents,created_at,notes,is_advance_order,advance_pickup_date,advance_pickup_time,clover_order_id,clover_status')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -717,6 +719,19 @@ export default function HomePage() {
               <div>
                 <p className="font-semibold text-slate-900">Order #{selectedOrder.id.slice(0, 6).toUpperCase()}</p>
                 <p className="mt-0.5 text-sm text-slate-500">Pickup: {selectedOrder.pickup_time}</p>
+                {selectedOrder.clover_order_id && (
+                  <a
+                    href="https://clover.com/home"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-cyan-700 hover:underline"
+                  >
+                    Clover: {selectedOrder.clover_order_id} ↗
+                  </a>
+                )}
+                {!selectedOrder.clover_order_id && selectedOrder.clover_status !== 'sent' && (
+                  <p className="mt-1 text-xs text-amber-600">Not synced to Clover</p>
+                )}
               </div>
               <p className={`text-3xl font-bold ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
                 ${(selectedOrder.total_cents / 100).toFixed(2)}
