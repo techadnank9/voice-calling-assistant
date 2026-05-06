@@ -45,7 +45,7 @@ export async function sendOrderToClover(params: {
   const orderRes = await fetch(`${base}/orders`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ note: noteText, orderType: { id: 'QNSM615M68WFE' } })
+    body: JSON.stringify({ note: noteText, orderType: { id: 'QNSM615M68WFE' }, employee: { id: 'Y4M48VMXFKAK2' } })
   });
   const order = await orderRes.json() as { id?: string; message?: string };
   if (!orderRes.ok) throw new Error(`Clover create order failed: ${order?.message ?? orderRes.status}`);
