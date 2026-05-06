@@ -230,6 +230,16 @@ app.post('/admin/clover-test', async (req: Request, res: Response) => {
       clover_business: 'llc'
     }).select('id').single();
 
+    // Insert order item so it shows correctly in the Orders page
+    if (newOrder?.id) {
+      await supabase.from('order_items').insert({
+        order_id: newOrder.id,
+        custom_name: itemName,
+        qty: itemQty,
+        line_total_cents: totalCents
+      });
+    }
+
     const result = await sendOrderToClover({
       customerName: 'Test User',
       callerPhone: '+15550001234',
