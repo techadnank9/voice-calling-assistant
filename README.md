@@ -18,7 +18,7 @@ Twilio is used only as phone number + PSTN transport. Deepgram handles voice int
 ## 1) Install
 
 ```bash
-cd /Users/adnan/Documents/voice-calling-assistant
+cd .
 npm install
 ```
 
@@ -30,7 +30,7 @@ Then run `supabase/seed_new_delhi_restaurant.sql` to load New Delhi Restaurant m
 ## 3) Backend env
 
 ```bash
-cd /Users/adnan/Documents/voice-calling-assistant/apps/backend
+cd ./apps/backend
 cp .env.example .env
 ```
 
@@ -51,7 +51,7 @@ Optional:
 ## 4) Frontend env
 
 ```bash
-cd /Users/adnan/Documents/voice-calling-assistant/apps/frontend
+cd ./apps/frontend
 cp .env.local.example .env.local
 ```
 
@@ -60,7 +60,7 @@ Set Supabase anon URL/key.
 ## 5) Run locally
 
 ```bash
-cd /Users/adnan/Documents/voice-calling-assistant
+cd .
 npm run dev:backend
 # in another terminal
 npm run dev:frontend
@@ -94,7 +94,7 @@ ElevenLabs can send post-call transcription and call-initiation-failure webhooks
 
 1. Push this repo to GitHub.
 2. In Render, choose **New +** -> **Blueprint** and select the repo.
-3. Render will detect `/Users/adnan/Documents/voice-calling-assistant/render.yaml` and create:
+3. Render will detect `./render.yaml` and create:
    - `voice-assistant-backend`
    - `voice-assistant-frontend`
 4. Set required backend env vars in Render:
